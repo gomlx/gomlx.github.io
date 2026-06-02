@@ -19,8 +19,13 @@ help:
 	@echo "  make clean      — remove ./public/ build output"
 	@echo ""
 
+PORT_OPT = 
+ifdef PORT
+  PORT_OPT = --port $(PORT)
+endif
+
 dev:
-	$(HUGO) server --disableFastRender --buildDrafts
+	$(HUGO) server $(PORT_OPT) --disableFastRender --buildDrafts
 
 build:
 	$(HUGO)
