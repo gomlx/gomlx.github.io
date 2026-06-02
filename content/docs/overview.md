@@ -2,7 +2,7 @@
 title: "What is GoMLX?"
 section: "Get started"
 weight: 1
-source: "https://github.com/gomlx/gomlx/blob/compute/README.md"
+source: "file:///home/janpf/Projects/gomlx/gomlx/README.md"
 ---
 
 # **_GoMLX_**, an Accelerated ML and Math Framework
@@ -14,7 +14,7 @@ source: "https://github.com/gomlx/gomlx/blob/compute/README.md"
 [![Linux/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml)
 [![Darwin/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml)
 [![Windows/amd64 Tests](https://github.com/gomlx/gomlx/actions/workflows/windows_amd64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/windows_amd64_tests.yaml)
-![Coverage](https://img.shields.io/badge/Coverage-71.4%25-yellow)
+![Coverage](https://img.shields.io/badge/Coverage-67.0%25-yellow)
 [![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
 [![Sponsor gomlx](https://img.shields.io/badge/Sponsor-gomlx-white?logo=github&style=flat-square)](https://github.com/sponsors/gomlx)
 
@@ -64,6 +64,28 @@ Documentation is kept up to date (if it is not well-documented, it is as if the 
 and error messages are useful (always with a stack-trace) and try to make it easy to solve issues.
 </div>
 
+## 🔮 Upcoming Features & Plans 🔮
+
+**Large API and package re-organization coming soon in v0.28 release:**
+
+- `backends` moved to `github.com/gomlx/compute` repository!
+  - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`.
+  - The _"go"_ backend is now implemented in `github.com/gomlx/compute/gobackend` (it's been greatly improved as well).
+  - The _"xla"_ backend is now implemented in `github.com/gomlx/go-xla/compute/xla`.
+- Removed `pkg/` prefix from the the top level packages (no need with `internal/` special handling).
+- The `context.Context` variable container redesigned (and simplified) into `model.Store` (the container)
+  the `model.Scope` (a pointer to a `Store` with the current scope).
+
+See more details in the our [CHANGELOG](docs/CHANGELOG.md), including how to use `cmd/convert_v0.28`, 
+a tool that facilitates the changes needed to move to the new API -- details in the [CHANGELOG](docs/CHANGELOG.md).
+
+**Upcoming features for the upcoming v0.28.0 release:**
+
+* Dynamic shapes support for GoMLX: **alpha**/**experimental**, only for the Go backend (XLA only supports static shapes).
+  But it will allow more efficient and padding-free (sometimes) models with Go. It also opens up better support
+  for ONNXRuntime backend (a goal for after the v0.28 release).  
+* Improvements and some SIMD support for the Go backend (now in repo `github.com/gomlx/compute/gobackend`).
+
 ## 🗺️ Overview
 
 **GoMLX** is a full-featured ML framework, supporting various well-known ML components  
@@ -103,27 +125,5 @@ tokenizer.
 
 ### Backends
 
-GoMLX is a friendly "intermediary ML API", that hosts a common API and a library of ML layers and such. But per-se it doesn't execute any computation: it relies on different backends to compile and execute the computation on very different hardware.
-
-There is a common backend interface (currently in `github.com/gomlx/gomlx/backends`, but it will soon go to its own repo), and 3 different implementations:
-
-   1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go, but only static-shape.
-      For linux/amd64, linux/arm64 (CPU) and darwin/arm64 (CPU) for now. Using the [go-xla](https://github.com/gomlx/go-xla) Go version of the APIs.
-   2. **`go`**: a pure Go backend (no C/C++ dependencies): slower but very portable (compiles to WASM/Windows/etc.): 
-      * SIMD support is underway (see [SIMD for Go](https://github.com/golang/go/issues/73787) and under-development [go-highway](https://github.com/ajroetker/go-highway)); 
-      * **🚀 NEW 🚀**: added support for some **fused operations** and for some types of quantization, greatly improving performance
-        in some cases.
-      * See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
-      * Dynamic shape support planned (maybe mid-2026).
-   3. **🚀 NEW 🚀** **[go-darwinml](https://github.com/gomlx/go-darwinml)**: Go bindings to Apple's CoreML supporting Metal acceleration, MLX, and any backend DarwinOS related. 
-
-### Highlights
-
-* Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
-  but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
-* [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
-* Autodiff: automatic differentiation—only gradients for now, no jacobian.
-* Context: automatic variable management for ML models.
-* ML layers library with some of the most popular machine learning "layers": FFN layers,  
 
 > This page is excerpted from the [full README](https://github.com/gomlx/gomlx). For complete documentation, browse the sections in the sidebar.

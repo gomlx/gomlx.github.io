@@ -2,7 +2,7 @@
 title: "Developing"
 section: "Guides"
 weight: 40
-source: "https://github.com/gomlx/gomlx/blob/compute/docs/developing.md"
+source: "file:///home/janpf/Projects/gomlx/gomlx/docs/developing.md"
 ---
 
 Below is a list of usual low level implementation tasks:

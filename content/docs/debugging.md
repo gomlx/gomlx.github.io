@@ -2,7 +2,7 @@
 title: "Debugging"
 section: "Guides"
 weight: 30
-source: "https://github.com/gomlx/gomlx/blob/compute/docs/debugging.md"
+source: "file:///home/janpf/Projects/gomlx/gomlx/docs/debugging.md"
 ---
 
 Unfortunately, the computers just "don't get it", and they do what we told them to do, and not what
@@ -17,7 +17,7 @@ being operated to confirm (or not) one's expectations.
 
 ## Delayed Errors
 
-Errors during the building of the graph are reported to the `Graph` or the `Context` or both. They,
+Errors during the building of the graph are reported to the `Graph` or the `Scope` or both. They,
 as well as `Node` and tensors, implement the methods `Ok()` and `Error()` to check if there has been
 an error, and what it is. The errors always include a stack-trace -- print error with `"%+v"` to get
 full stack-trace output.
@@ -51,7 +51,7 @@ its stack-trace. And `Node.Trace()` to access it for printing or debugging.
 
 ## `NanLogger`
 
-The [`nanlogger.NanLogger`](https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph/nanlogger) allows one 
+The [`nanlogger.NanLogger`](https://pkg.go.dev/github.com/gomlx/gomlx/core/graph/nanlogger) allows one 
 to select "traces" on the model, which will panic with a stack trace (and some optional arbitrary
 scope message) whenever a `NaN` or `±Inf` is seen -- or it can be handled by an arbitrary function,
 with relatively low cost to the model.
