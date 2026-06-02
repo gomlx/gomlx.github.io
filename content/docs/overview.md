@@ -2,7 +2,7 @@
 title: "What is GoMLX?"
 section: "Get started"
 weight: 1
-source: "file:///home/janpf/Projects/gomlx/gomlx/README.md"
+source: "https://github.com/gomlx/gomlx/blob/main/README.md"
 ---
 
 # **_GoMLX_**, an Accelerated ML and Math Framework

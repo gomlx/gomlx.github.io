@@ -2,7 +2,7 @@
 title: "TODO"
 section: "Guides"
 weight: 20
-source: "file:///home/janpf/Projects/gomlx/gomlx/docs/TODO.md"
+source: "https://github.com/gomlx/gomlx/blob/main/docs/TODO.md"
 ---
 
   # GoMLX Roadmap & Ownership

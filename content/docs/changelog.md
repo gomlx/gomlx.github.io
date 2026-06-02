@@ -2,7 +2,7 @@
 title: "CHANGELOG"
 section: "Guides"
 weight: 10
-source: "file:///home/janpf/Projects/gomlx/gomlx/docs/CHANGELOG.md"
+source: "https://github.com/gomlx/gomlx/blob/main/docs/CHANGELOG.md"
 ---
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
