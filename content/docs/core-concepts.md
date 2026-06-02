@@ -125,9 +125,9 @@ x = denseLayer(ctx.In("layer2"), x, 64)  // weights stored at "layer2/weights"
 The context can serialize all its variables to disk and restore them:
 
 ```go
-checkpoint := checkpoints.Build(ctx).Dir("/tmp/my-model").Done()
-checkpoint.Save()   // saves all variables to disk
-checkpoint.Restore() // restores from the latest checkpoint
+checkpointHandler := checkpoints.Build(ctx).Dir("/tmp/my-model").Done()
+checkpointHandler.Save()   // saves all variables to disk
+checkpointHandler.Restore() // restores from the latest checkpoint
 ```
 
 ---
