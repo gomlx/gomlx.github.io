@@ -8,28 +8,46 @@ weight: 3
 
 GoMLX is built on three layered abstractions. Understanding them makes every other part of the library click:
 
-1. **Manager** — the connection to a hardware backend (CPU, GPU, TPU)
+1. **Backend** — the connection to a hardware backend (CPU, GPU, TPU)
 2. **Graph** — a computation graph that you define as a pure Go function
-3. **Context** — a store for named, typed model parameters (weights)
+3. **Store** — a store for scoped, named and typed model parameters (weights), as well as hyperparameters.
 
-You can use just the manager and graph for mathematical computing, or add the context to build full trainable models.
+You can use just the backend and graph for mathematical computing, or add a `Store` to build trainable models.
 
 ---
 
-## The Manager
+## Backend
 
-The manager connects your Go process to a hardware backend. Create one at program startup and reuse it everywhere:
+The `compute.Backend` connects your Go process to a hardware+software backend abstraction capable of executing our 
+computations. Create one at program startup and reuse it everywhere:
 
+<!-- sync_code: file=core_concepts/graph/main.go tag=backend -->
 ```go
-import "github.com/gomlx/gomlx/backends"
+import (
+    _ "github.com/gomlx/gomlx/backends/defaults"
+    "github.com/gomlx/compute"
+)
 
-manager := backends.New() // auto-selects best available backend
+backend := compute.New() // auto-selects best available backend
 ```
 
-The manager owns the device memory, compiles graphs to native code, and manages data transfer between host and device. One manager per process is the typical pattern.
+The backend owns the device memory, compiles graphs to native code, and manages data transfer between host and device.
+One backend per process is the typical pattern.
 
 {{< callout type="note" >}}
-`backends.New()` selects the best available backend in order: CUDA GPU → Metal (Apple) → CPU. To pin a specific backend, use `backends.NewWithName("cpu")`.
+`compute.New()` selects the best available backend in order: CUDA GPU → Metal (Apple) → CPU. 
+To pin a specific backend, use the environment variable `GOMLX_BACKEND` or during construction
+use the form  `compute.NewWithConfig("go")`.
+{{< /callout >}}
+
+{{< callout type="note" >}}
+The following backends are implemented so far:
+
+- **"go"**: Pure Go implementation: simple, very portable but slower. It works in WASM also (so it can be
+  used in websites).
+- **"xla"** (or "xla:cpu", "xla:cuda", "xla:tpu"): uses [Google's XLA](https://openxla.org/), the same backend used by
+ TensorFlow, Jax and optionally by PyTorch.
+- **darwinml**: (**experimental**) uses Apple Metal when possible.
 {{< /callout >}}
 
 ---
