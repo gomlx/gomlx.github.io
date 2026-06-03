@@ -41,14 +41,18 @@ else ifdef LOCAL_PATH
 	SYNC_OPTS = -path $(LOCAL_PATH)
 endif
 
+VMODULE_OPT = ""
+ifdef VMODULE
+	VMODULE_OPT = "-vmodule=$(VMODULE)"
+endif
+
 sync: sync_docs sync_code
 
 sync_docs:
-	go run cmd/sync_docs/main.go $(SYNC_OPTS)
+	go run cmd/sync_docs/main.go $(SYNC_OPTS) $(VMODULE_OPT)
 
 sync_code:
-	go run cmd/sync_code/main.go $(SYNC_OPTS)
-
+	go run cmd/sync_code/main.go $(SYNC_OPTS) $(VMODULE_OPT)
 
 clean:
 	rm -rf public/
