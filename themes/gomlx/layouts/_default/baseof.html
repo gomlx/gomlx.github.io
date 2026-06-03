@@ -10,7 +10,7 @@
   <meta property="og:description"
     content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
   <link rel="canonical" href="{{ .Permalink }}">
-  <link rel="icon" type="image/jpeg" href="{{ " img/logo.jpeg" | relURL }}">
+  <link rel="icon" type="image/jpeg" href="{{ "img/logo.jpeg" | relURL }}">
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,7 +27,7 @@
   {{ end }}
 
   <!-- Favicon -->
-  <link rel="icon" type="image/svg+xml" href="{{ " img/favicon.svg" | relURL }}">
+  <link rel="icon" type="image/svg+xml" href="{{ "img/favicon.svg" | relURL }}">
 </head>
 
 <body>
@@ -41,7 +41,7 @@
     {{ block "main" . }}{{ end }}
   </main>
   {{ partial "footer.html" . }}
-  <script>window.GomlxBaseUrl = "{{ " / " | relURL }}";</script>
+  <script>window.GomlxBaseUrl = "{{ "/" | relURL }}";</script>
   {{ $mainJs := resources.Get "js/main.js" }}
   {{ if $mainJs }}
   <script src="{{ $mainJs.RelPermalink }}"></script>
