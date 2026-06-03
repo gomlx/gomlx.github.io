@@ -2,7 +2,7 @@
 # Usage: make <target>
 
 HUGO        := hugo
-.PHONY: help dev build sync clean
+.PHONY: help dev build sync clean sync_docs sync_code
 
 help:
 	@echo ""
@@ -19,8 +19,13 @@ help:
 	@echo "  make clean      — remove ./public/ build output"
 	@echo ""
 
+PORT_OPT = 
+ifdef PORT
+  PORT_OPT = --port $(PORT)
+endif
+
 dev:
-	$(HUGO) server --disableFastRender --buildDrafts
+	$(HUGO) server $(PORT_OPT) --disableFastRender --buildDrafts
 
 build:
 	$(HUGO)
@@ -36,8 +41,18 @@ else ifdef LOCAL_PATH
 	SYNC_OPTS = -path $(LOCAL_PATH)
 endif
 
-sync:
-	go run cmd/sync_docs/main.go $(SYNC_OPTS)
+VMODULE_OPT = ""
+ifdef VMODULE
+	VMODULE_OPT = "-vmodule=$(VMODULE)"
+endif
+
+sync: sync_docs sync_code
+
+sync_docs:
+	go run cmd/sync_docs/main.go $(SYNC_OPTS) $(VMODULE_OPT)
+
+sync_code:
+	go run cmd/sync_code/main.go $(SYNC_OPTS) $(VMODULE_OPT)
 
 clean:
 	rm -rf public/

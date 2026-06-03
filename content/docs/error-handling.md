@@ -2,7 +2,7 @@
 title: "Error Handling"
 section: "Guides"
 weight: 60
-source: "https://github.com/gomlx/gomlx/blob/compute/docs/error_handling.md"
+source: "https://github.com/gomlx/gomlx/blob/main/docs/error_handling.md"
 ---
 
 ## Compile time, Runtime, **Graph Building Time** and **Graph Execution Time**
@@ -35,7 +35,7 @@ into **"graph building time"** and **"graph execution time"**.
 
 ## Exceptions
 
-`graph.Graph`, `context.Context` and `tensors.Tensor` objects report errors using "exceptions" (`panic` with errors 
+`graph.Graph`, `model.Scope` and `tensors.Tensor` objects report errors using "exceptions" (`panic` with errors 
 with a stack trace), using the very simple [`github.com/gomlx/exceptions`](https://github.com/gomlx/exceptions) library.
 
 This is not aligned with the "idiomatic" Go strategy of checking errors at every step. 
