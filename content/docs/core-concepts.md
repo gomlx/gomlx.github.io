@@ -45,15 +45,14 @@ To pin a specific backend, use the environment variable `GOMLX_BACKEND` or durin
 use the form  `compute.NewWithConfig("go")`.
 {{< /callout >}}
 
-{{< callout type="note" >}}
 The following backends are implemented so far:
 
 - **"go"**: Pure Go implementation: simple, very portable but slower. It works in WASM also (so it can be
   used in websites).
 - **"xla"** (or "xla:cpu", "xla:cuda", "xla:tpu"): uses [Google's XLA](https://openxla.org/), the same backend used by
  TensorFlow, Jax and optionally by PyTorch.
-- **darwinml**: (**experimental**) uses Apple Metal when possible.
-{{< /callout >}}
+- [go-darwinml**](https://github.com/gomlx/go-darwinml): (**experimental, in development**) it provides
+  the `CoreML` (ANE, GPU, CPU) and the `MPSGraph` (GPU/Metal) backends.
 
 ---
 
@@ -67,13 +66,13 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 )
 
-	addFn := func(a, b *Node) *Node {
-		fmt.Println("* building addFn computation graph")
-		return Add(a, b)
-	}
-	addExec := MustNewExec(backend, addFn)
-	fmt.Printf("\t- 1+1=%s\n", addExec.MustCall1(1.0, 1.0))
-	fmt.Printf("\t- 2+2=%s\n", addExec.MustCall1(2.0, 2.0))
+addFn := func(a, b *Node) *Node {
+	fmt.Println("* building addFn computation graph")
+	return Add(a, b)
+}
+addExec := MustNewExec(backend, addFn)
+fmt.Printf("\t- 1+1=%s\n", addExec.MustCall1(1.0, 1.0))
+fmt.Printf("\t- 2+2=%s\n", addExec.MustCall1(2.0, 2.0))
 ```
 
 Output:
@@ -88,7 +87,7 @@ Output:
 
 {{< callout type="note" >}}
 - The `addFn` was called only once to build the graph. After the graph was built and compiled, it was simply executed twice iwth `addExec.MustCall1()`. 
-- The "1" in `addexec.MustCall1()` means it only returns one output.
+- We _dot imported_ the package `. "github.com/gomlx/gomlx/core/graph"`. This is common practice when most of the file contents are graph building blocks. 
 {{< /callout >}}
 
 
