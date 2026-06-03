@@ -221,8 +221,10 @@ func getFileContent(mode, value, filePath string) ([]byte, error) {
 // --- Snippet Parsing ---
 
 // parseGoSnippets parses all snippets annotated with //md: or //md_start://md_end: blocks in a Go file.
-func parseGoSnippets(goContent string) map[string][]string {
+// It returns a map of tag -> lines, and a map of tag -> first line number (excluding imports).
+func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 	snippets := make(map[string][]string)
+	firstLineNums := make(map[string]int)
 	lines := strings.Split(goContent, "\n")
 
 	// Regular expression to match trailing //md:<tags> comments
@@ -234,8 +236,10 @@ func parseGoSnippets(goContent string) map[string][]string {
 	var braceDepth int
 	var inMultiLineComment, inString, inBacktick bool
 	var inFunc bool
+	var inImportBlock bool
 
-	for _, line := range lines {
+	for i, line := range lines {
+		lineNum := i + 1
 		trimmed := strings.TrimSpace(line)
 
 		// 1. Control Comment: //md_start:tag1,tag2,...
@@ -289,8 +293,28 @@ func parseGoSnippets(goContent string) map[string][]string {
 			processedLine = line[:loc[0]]
 		}
 
-		// Check if a function is starting at package level
+		// Check if it's an import line
 		cleanLine := strings.TrimSpace(processedLine)
+		isImport := false
+		if strings.HasPrefix(cleanLine, "import") {
+			isImport = true
+			if strings.Contains(cleanLine, "(") {
+				inImportBlock = true
+			}
+		} else if inImportBlock {
+			isImport = true
+			if strings.Contains(cleanLine, ")") {
+				inImportBlock = false
+			}
+		}
+
+		// Check if it's a comment or empty line
+		isCommentOrEmpty := false
+		if inMultiLineComment || cleanLine == "" || strings.HasPrefix(cleanLine, "//") || strings.HasPrefix(cleanLine, "/*") {
+			isCommentOrEmpty = true
+		}
+
+		// Check if a function is starting at package level
 		if braceDepth == 0 && strings.HasPrefix(cleanLine, "func ") {
 			inFunc = true
 		}
@@ -321,10 +345,14 @@ func parseGoSnippets(goContent string) map[string][]string {
 		// Save the processed line to all active and trailing tags
 		for t := range lineTags {
 			snippets[t] = append(snippets[t], processedLine)
+			// Track the first line number for this tag (excluding import and comment/empty lines)
+			if !isImport && !isCommentOrEmpty && firstLineNums[t] == 0 {
+				firstLineNums[t] = lineNum
+			}
 		}
 	}
 
-	return snippets
+	return snippets, firstLineNums
 }
 
 // updateBraceDepth counts matching curly braces while ignoring string literals and comments.
@@ -498,26 +526,33 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 	// or:    <!-- sync_code: file=<file_path> output_tag=<tag> -->
 	reComment := regexp.MustCompile(`^\s*<!--\s*sync_code:\s*file=(\S+)\s+(tag|output_tag)=(\S+)\s*-->\s*$`)
 
+	type GoSnippets struct {
+		Lines        map[string][]string
+		FirstLineNum map[string]int
+	}
+
 	// Cache to prevent repetitive requests/reads/executions for the same files.
-	fileSnippetsCache := make(map[string]map[string][]string)
+	fileSnippetsCache := make(map[string]GoSnippets)
 	fileOutputCache := make(map[string]map[string][]string)
 
-	getSnippet := func(filePath, tag string) ([]string, error) {
+	getSnippet := func(filePath, tag string) ([]string, int, error) {
 		snippets, ok := fileSnippetsCache[filePath]
 		if !ok {
 			goContent, err := getFileContent(mode, value, filePath)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load Go file: %w", err)
+				return nil, 0, fmt.Errorf("failed to load Go file: %w", err)
 			}
-			snippets = parseGoSnippets(string(goContent))
+			lines, lineNums := parseGoSnippets(string(goContent))
+			snippets = GoSnippets{Lines: lines, FirstLineNum: lineNums}
 			fileSnippetsCache[filePath] = snippets
 		}
 
-		lines, ok := snippets[tag]
+		lines, ok := snippets.Lines[tag]
 		if !ok {
-			return nil, fmt.Errorf("tag %q not found in Go file", tag)
+			return nil, 0, fmt.Errorf("tag %q not found in Go file", tag)
 		}
-		return lines, nil
+		lineNum := snippets.FirstLineNum[tag]
+		return lines, lineNum, nil
 	}
 
 	getOutputSnippet := func(filePath, tag string) ([]string, error) {
@@ -553,16 +588,20 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 			// Fetch the target snippet
 			var snippetLines []string
 			var err error
+			var lineNum int
+			var linkLine string
 			if isOutput {
 				snippetLines, err = getOutputSnippet(targetFile, targetTag)
 				if err != nil {
 					return false, fmt.Errorf("error resolving output snippet for %s (tag=%s): %w", targetFile, targetTag, err)
 				}
 			} else {
-				snippetLines, err = getSnippet(targetFile, targetTag)
+				snippetLines, lineNum, err = getSnippet(targetFile, targetTag)
 				if err != nil {
 					return false, fmt.Errorf("error resolving code snippet for %s (tag=%s): %w", targetFile, targetTag, err)
 				}
+				linkURL := getSourceLinkURL(mode, value, targetFile, lineNum)
+				linkLine = fmt.Sprintf(`<div align="right"><small><a href="%s">(See source)</a></small></div>`, linkURL)
 			}
 
 			// Adjust the common leading indentation
@@ -586,6 +625,8 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 				}
 				break
 			}
+
+			reSourceLink := regexp.MustCompile(`(?i)^\s*(\(\[See source\]\([^)]+\)\)|<div\s+align="right">\s*<small>\s*<a\s+href="[^"]+">\(See source\)</a>\s*</small>\s*</div>)\s*$`)
 
 			if nextBlockStartIdx != -1 {
 				// Find the ending tag of the block
@@ -618,23 +659,53 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 						}
 					}
 
+					hasOldLink := false
+					var existingLinkLine string
+					if !isOutput && nextBlockEndIdx+1 < len(lines) {
+						nextLine := lines[nextBlockEndIdx+1]
+						if reSourceLink.MatchString(nextLine) {
+							hasOldLink = true
+							existingLinkLine = nextLine
+						}
+					}
+
+					if !isOutput {
+						if hasOldLink {
+							if existingLinkLine != linkLine {
+								changed = true
+							}
+						} else {
+							changed = true
+						}
+					}
+
 					if changed {
 						modified = true
 					}
 
-					// Append the fresh code block
+					// Append the fresh code block and optional link
 					newLines = append(newLines, fenceStart)
 					newLines = append(newLines, adjustedSnippet...)
 					newLines = append(newLines, "```")
+					if !isOutput {
+						newLines = append(newLines, linkLine)
+					}
 
-					// Fast forward index past the old code block
-					i = nextBlockEndIdx
+					// Fast forward index past the old code block and link
+					if hasOldLink {
+						i = nextBlockEndIdx + 1
+					} else {
+						i = nextBlockEndIdx
+					}
 				} else {
 					// Opening code fence found but no closing fence. We overwrite and append.
 					modified = true
 					newLines = append(newLines, fenceStart)
 					newLines = append(newLines, adjustedSnippet...)
 					newLines = append(newLines, "```")
+					if !isOutput {
+						newLines = append(newLines, linkLine)
+					}
 				}
 			} else {
 				// No code block following the comment. Append the new code block.
@@ -642,6 +713,9 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 				newLines = append(newLines, fenceStart)
 				newLines = append(newLines, adjustedSnippet...)
 				newLines = append(newLines, "```")
+				if !isOutput {
+					newLines = append(newLines, linkLine)
+				}
 			}
 		}
 		i++
@@ -861,4 +935,18 @@ func trimTrailingEmptyLines(lines []string) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
+}
+
+// getSourceLinkURL constructs the GitHub URL for the source file.
+func getSourceLinkURL(mode, value, filePath string, lineNum int) string {
+	ref := "main"
+	if mode != "path" {
+		ref = value
+	}
+	normalizedPath := strings.ReplaceAll(filePath, "_", "-")
+	url := fmt.Sprintf("https://github.com/gomlx/gomlx/blob/%s/examples/gomlx.github.io/%s", ref, normalizedPath)
+	if lineNum > 0 {
+		url = fmt.Sprintf("%s#L%d", url, lineNum)
+	}
+	return url
 }
