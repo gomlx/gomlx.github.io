@@ -41,8 +41,14 @@ else ifdef LOCAL_PATH
 	SYNC_OPTS = -path $(LOCAL_PATH)
 endif
 
-sync:
+sync: sync_docs sync_code
+
+sync_docs:
 	go run cmd/sync_docs/main.go $(SYNC_OPTS)
+
+sync_code:
+	go run cmd/sync_code/main.go $(SYNC_OPTS)
+
 
 clean:
 	rm -rf public/
