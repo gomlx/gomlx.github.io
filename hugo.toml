@@ -1,4 +1,4 @@
-languageCode = "en-us"
+locale = "en-us"
 title = "GoMLX — Machine Learning for Go"
 theme = "gomlx"
 enableGitInfo = true
