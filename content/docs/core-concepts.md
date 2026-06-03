@@ -8,9 +8,10 @@ weight: 3
 
 GoMLX is built on three layered abstractions. Understanding them makes every other part of the library click:
 
-1. **Backend** — the connection to a hardware backend (CPU, GPU, TPU)
-2. **Graph** — a computation graph that you define as a pure Go function
-3. **Store** — a store for scoped, named and typed model parameters (weights), as well as hyperparameters.
+1. **Backend** — the connection to a hardware backend (CPU, GPU, TPU).
+2. **Graph** — a computation graph that you define as a pure Go function.
+3. **Tensor** — a concrete multi-dimensional array (or scalar) value, used as input and output when executing graphs. 
+3. **Store** — a scoped storage for named and typed model parameters (weights), as well as hyperparameters of a model.
 
 You can use just the backend and graph for mathematical computing, or add a `Store` to build trainable models.
 
@@ -28,7 +29,7 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
 )
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L12">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go">(See source)</a></small></div>
 
 Output:
 
@@ -59,7 +60,10 @@ The following backends are implemented so far:
 
 ## Computation Graphs
 
-A **graph** is a pure function that describes a computation in terms of `*graph.Node` values. GoMLX traces this function once, compiles it to XLA HLO, and produces an executable that runs entirely on the device.
+A **graph** is a pure function that describes a computation in terms of `*graph.Node` values and operations
+connecting them.
+GoMLX provides the high-level API to build these graphs. 
+The computation graphs are then JIT-compiled and can be executed very efficiently by the selected backend.
 
 <!-- sync_code: file=core_concepts/graph/main.go tag=cell2 -->
 ```go
@@ -68,20 +72,20 @@ import (
 )
 
 addFn := func(a, b *Node) *Node {
-	fmt.Println("* building addFn computation graph")
+	fmt.Printf("* building addFn computation graph: a.shape=%s, b.shape=%s\n", a.Shape(), b.Shape())
 	return Add(a, b)
 }
-addExec := MustNewExec(backend, addFn)
-fmt.Printf("\t- 1+1=%s\n", addExec.MustCall1(1.0, 1.0))
-fmt.Printf("\t- 2+2=%s\n", addExec.MustCall1(2.0, 2.0))
+addExec := MustNewExec1(backend, addFn)
+fmt.Printf("\t- 1+1=%s\n", addExec.MustCall(1.0, 1.0))
+fmt.Printf("\t- 2+2=%s\n", addExec.MustCall(2.0, 2.0))
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L12">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L27">(See source)</a></small></div>
 
 Output:
 
 <!-- sync_code: file=core_concepts/graph/main.go output_tag=cell2 -->
 ```
-* building addFn computation graph
+* building addFn computation graph: a.shape=(Float64), b.shape=(Float64)
 	- 1+1=float64(2)
 	- 2+2=float64(4)
 ```
@@ -110,51 +114,40 @@ an error.
 
 <!-- sync_code: file=core_concepts/graph/main.go tag=cell3 -->
 ```go
-_, err := addExec.Call1(int32(1), float32(1.0))
+_, err := addExec.Call(int32(1), float32(1.0))
 if err != nil {
 	//...
 }
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L40">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L39">(See source)</a></small></div>
 
 Output:
 
 <!-- sync_code: file=core_concepts/graph/main.go output_tag=cell3 -->
 ```
-* building addFn computation graph
+* building addFn computation graph: a.shape=(Int32), b.shape=(Float32)
 Error: cannot broadcast Int32 and Float32 for "Add": they have different dtypes
 	.../gomlx.github.io/core-concepts/graph/main.go:29
-	.../gomlx.github.io/core-concepts/graph/main.go:40
+	.../gomlx.github.io/core-concepts/graph/main.go:39
 ```
 
 ---
 
-## Shapes (`shapes.Shape`) and data types (`dtypes.DType`)
+## Tensors
+
+
+### Shapes and data types (dtypes)
 
 Every node has a **shape**: a list of dimension sizes, plus a dtype -- and optionally names is using dynamic shapes. 
 GoMLX checks shape compatibility at graph construction time — mismatches are caught before any computation runs (see example above).
-
-
-
-```go
-// Shape: [batch, height, width, channels]
-imgShape := shapes.Make(dtypes.Float32, 32, 224, 224, 3)
-
-// Scalar
-scalarShape := shapes.Make(dtypes.Float64) // no dimensions
-
-// Check shape at construction
-x := graph.Parameter(g, "x", imgShape)
-fmt.Println(x.Shape()) // Float32[32, 224, 224, 3]
-```
 
 Common dtypes: `dtypes.Float32`, `dtypes.Float64`, `dtypes.Int32`, `dtypes.Int64`, `dtypes.Bool`.
 
 ---
 
-## The Context
+## The `model.Store`
 
-The **context** is a hierarchical store for model parameters. Think of it as the model's named weight dictionary, with Go's type safety built in.
+The **store** is a hierarchical store for model parameters. Think of it as the model's named weight dictionary, with Go's type safety built in.
 
 ```go
 import "github.com/gomlx/gomlx/ml/context"
@@ -162,7 +155,7 @@ import "github.com/gomlx/gomlx/ml/context"
 ctx := context.New()
 
 // Inside a graph function, variables are created or retrieved by name
-func denseLayer(ctx *context.Context, x *graph.Node, units int) *graph.Node {
+func denseLayer(scope *context.Context, x *graph.Node, units int) *graph.Node {
     w := ctx.WithInitializer(initializers.GlorotUniform).
         VariableWithShape("weights", shapes.Make(dtypes.Float32, x.Shape().Dim(-1), units))
     b := ctx.VariableWithShape("bias", shapes.Make(dtypes.Float32, units))
@@ -179,32 +172,22 @@ x = denseLayer(ctx.In("layer1"), x, 128) // weights stored at "layer1/weights"
 x = denseLayer(ctx.In("layer2"), x, 64)  // weights stored at "layer2/weights"
 ```
 
-### Checkpointing
-
-The context can serialize all its variables to disk and restore them:
-
-```go
-checkpointHandler := checkpoints.Build(ctx).Dir("/tmp/my-model").Done()
-checkpointHandler.Save()   // saves all variables to disk
-checkpointHandler.Restore() // restores from the latest checkpoint
-```
-
 ---
 
-## Putting it together
+## Training a Model
 
 Here is the minimal skeleton of a trainable GoMLX program:
 
 ```go
 func main() {
     // 1. Connect to hardware
-    manager := backends.New()
+    backend := compute.New()
 
-    // 2. Create a context to hold weights
-    ctx := context.New()
+    // 2. Create a store to hold weights
+    store := model.New()
 
     // 3. Define your model as a graph function
-    trainer := train.NewTrainer(manager, ctx, myModelFn,
+    trainer := train.NewTrainer(backend, store, myModelFn,
         losses.SparseCategoricalCrossEntropyLogits,
         optimizers.Adam(),
     )
@@ -215,4 +198,6 @@ func main() {
 }
 ```
 
-Each of these pieces — manager, graph, context, trainer — is independently replaceable. You can swap the optimizer, the backend, or the loss function without touching the rest.
+Each of these pieces — backend, graph, store, trainer — is independently replaceable. You can swap the trainer, optimizer, the backend, or the loss function without touching the rest of .
+
+Other related topics: **datasets**, **Hyperparameters**, **Losses**, **Optimizers**, **Metrics**.
