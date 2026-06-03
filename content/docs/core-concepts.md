@@ -24,11 +24,14 @@ computations. Create one at program startup and reuse it everywhere:
 <!-- sync_code: file=core_concepts/graph/main.go tag=backend -->
 ```go
 import (
-    _ "github.com/gomlx/gomlx/backends/defaults"
-    "github.com/gomlx/compute"
+	"fmt"
+
+	"github.com/gomlx/compute"
+	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends: "go", "xla:cpu", "xla:cuda", etc.
 )
 
-backend := compute.New() // auto-selects best available backend
+	backend := compute.MustNew() // auto-selects best available backend
+	fmt.Printf("Backend: %s\n", backend.Description())
 ```
 
 The backend owns the device memory, compiles graphs to native code, and manages data transfer between host and device.
