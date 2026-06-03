@@ -231,6 +231,10 @@ func parseGoSnippets(goContent string) map[string][]string {
 	var activeTagsStack [][]string
 	activeTagsMap := make(map[string]int) // tracks counts of active tags to handle nested active tags cleanly
 
+	var braceDepth int
+	var inMultiLineComment, inString, inBacktick bool
+	var inFunc bool
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
@@ -285,6 +289,26 @@ func parseGoSnippets(goContent string) map[string][]string {
 			processedLine = line[:loc[0]]
 		}
 
+		// Check if a function is starting at package level
+		cleanLine := strings.TrimSpace(processedLine)
+		if braceDepth == 0 && strings.HasPrefix(cleanLine, "func ") {
+			inFunc = true
+		}
+
+		// Update brace depth based on the processed line
+		braceDepth = updateBraceDepth(processedLine, braceDepth, &inMultiLineComment, &inString, &inBacktick)
+
+		// If we are inside a function block, strip the first level of indentation
+		if inFunc {
+			processedLine = stripOneLevelOfIndentation(processedLine)
+		}
+
+		// If brace depth returns to 0 (or less), we are no longer inside a function
+		if braceDepth <= 0 {
+			inFunc = false
+			braceDepth = 0
+		}
+
 		// Gather all unique tags for this line
 		lineTags := make(map[string]bool)
 		for _, t := range trailingTags {
@@ -301,6 +325,84 @@ func parseGoSnippets(goContent string) map[string][]string {
 	}
 
 	return snippets
+}
+
+// updateBraceDepth counts matching curly braces while ignoring string literals and comments.
+func updateBraceDepth(line string, currentDepth int, inMultiLineComment, inString, inBacktick *bool) int {
+	depth := currentDepth
+	i := 0
+	for i < len(line) {
+		if *inMultiLineComment {
+			if i+1 < len(line) && line[i] == '*' && line[i+1] == '/' {
+				*inMultiLineComment = false
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		}
+
+		if *inString {
+			if line[i] == '\\' {
+				i += 2 // skip escaped character
+			} else if line[i] == '"' {
+				*inString = false
+				i++
+			} else {
+				i++
+			}
+			continue
+		}
+
+		if *inBacktick {
+			if line[i] == '`' {
+				*inBacktick = false
+				i++
+			} else {
+				i++
+			}
+			continue
+		}
+
+		if i+1 < len(line) && line[i] == '/' && line[i+1] == '/' {
+			break // comment starts, rest of the line is ignored
+		}
+		if i+1 < len(line) && line[i] == '/' && line[i+1] == '*' {
+			*inMultiLineComment = true
+			i += 2
+			continue
+		}
+
+		if line[i] == '"' {
+			*inString = true
+			i++
+			continue
+		}
+		if line[i] == '`' {
+			*inBacktick = true
+			i++
+			continue
+		}
+
+		if line[i] == '{' {
+			depth++
+		} else if line[i] == '}' {
+			depth--
+		}
+		i++
+	}
+	return depth
+}
+
+// stripOneLevelOfIndentation strips one leading tab or four leading spaces from a line.
+func stripOneLevelOfIndentation(line string) string {
+	if strings.HasPrefix(line, "\t") {
+		return strings.TrimPrefix(line, "\t")
+	}
+	if strings.HasPrefix(line, "    ") {
+		return strings.TrimPrefix(line, "    ")
+	}
+	return line
 }
 
 // adjustIndentation dedents a list of lines so that the minimum common indentation is removed.
