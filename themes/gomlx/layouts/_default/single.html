@@ -5,7 +5,7 @@
     <div class="sidebar-section">
       <div class="sidebar-section-title">{{ .title }}</div>
       {{ range .pages }}
-      <a href="{{ .url | absURL }}" class="sidebar-link{{ if eq $.Permalink (.url | absURL) }} is-active{{ end }}">{{
+      <a href="{{ .url | relURL }}" class="sidebar-link{{ if eq $.RelPermalink (.url | relURL) }} is-active{{ end }}">{{
         .name }}</a>
       {{ end }}
     </div>
