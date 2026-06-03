@@ -21,15 +21,19 @@ You can use just the backend and graph for mathematical computing, or add a `Sto
 The `compute.Backend` connects your Go process to a hardware+software backend abstraction capable of executing our 
 computations. Create one at program startup and reuse it everywhere:
 
-<!-- sync_code: file=core_concepts/graph/main.go tag=backend -->
+<!-- sync_code: file=core_concepts/graph/main.go tag=cell1 -->
 ```go
 import (
 	"github.com/gomlx/compute"
 	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
 )
+```
 
-	backend := compute.MustNew() // auto-selects best available backend
-	fmt.Printf("Backend: %s\n", backend.Description())
+Output:
+
+<!-- sync_code: file=core_concepts/graph/main.go output_tag=cell1 -->
+```
+Backend: xla:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/go-xla/nvidia/pjrt_c_api_cuda_plugin.so) v0.100 [StableHLO] [1 device(s)]
 ```
 
 The backend owns the device memory, compiles graphs to native code, and manages data transfer between host and device.
@@ -57,23 +61,42 @@ The following backends are implemented so far:
 
 A **graph** is a pure function that describes a computation in terms of `*graph.Node` values. GoMLX traces this function once, compiles it to XLA HLO, and produces an executable that runs entirely on the device.
 
+<!-- sync_code: file=core_concepts/graph/main.go tag=cell2 -->
 ```go
-// Define a graph function — just a Go function returning nodes
-addFn := graph.Compile(manager, func(g *graph.Graph) *graph.Node {
-    a := graph.Parameter(g, "a", shapes.Make(dtypes.Float32, 4))
-    b := graph.Parameter(g, "b", shapes.Make(dtypes.Float32, 4))
-    return graph.Add(a, b)
-})
+import (
+	. "github.com/gomlx/gomlx/core/graph"
+)
 
-// Execute it — inputs move to device, result moves back
-result := addFn.Call(tensorA, tensorB)
+	addFn := func(a, b *Node) *Node {
+		fmt.Println("* building addFn computation graph")
+		return Add(a, b)
+	}
+	addExec := MustNewExec(backend, addFn)
+	fmt.Printf("\t- 1+1=%s\n", addExec.MustCall1(1.0, 1.0))
+	fmt.Printf("\t- 2+2=%s\n", addExec.MustCall1(2.0, 2.0))
 ```
+
+Output:
+
+
+<!-- sync_code: file=core_concepts/graph/main.go output_tag=cell2 -->
+```
+* building addFn computation graph
+	- 1+1=float64(2)
+	- 2+2=float64(4)
+```
+
+{{< callout type="note" >}}
+- The `addFn` was called only once to build the graph. After the graph was built and compiled, it was simply executed twice iwth `addExec.MustCall1()`. 
+- The "1" in `addexec.MustCall1()` means it only returns one output.
+{{< /callout >}}
+
 
 ### Why graphs?
 
-This design gives XLA visibility over the entire computation so it can apply aggressive optimizations: operator fusion, memory layout selection, and loop unrolling — automatically.
+This design gives XLA visibility over the entire computation so it can apply aggressive optimizations: operator fusion, memory layout selection, etc. — automatically.
 
-Your Go code never runs on the GPU. Only the *compiled graph* runs there. This is the same design used by JAX and TensorFlow's `tf.function`.
+Your Go code never runs on the GPU. Only the *compiled graph* runs there. This is the same design used by JAX `@jax.jit` and TensorFlow's `@tf.function`.
 
 ### Nodes are values, not tensors
 
