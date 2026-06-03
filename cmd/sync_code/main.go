@@ -5,12 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -28,17 +29,18 @@ const repoFullName = repoOwner + "/" + repoName
 // --- Main ---
 
 func main() {
+	klog.InitFlags(nil)
 	mode, ref, err := parseFlags()
 	if err != nil {
-		log.Fatalf("Error parsing flags: %v", err)
+		klog.Fatalf("Error parsing flags: %v", err)
 	}
 
 	// Resolve "latest" version to the actual release tag if needed.
 	if mode == "version" && ref == "latest" {
-		log.Println("Fetching latest release tag from GitHub...")
+		klog.V(1).Info("Fetching latest release tag from GitHub...")
 		latest, err := fetchLatestReleaseTag()
 		if err != nil {
-			log.Fatalf("Failed to fetch latest release: %v", err)
+			klog.Fatalf("Failed to fetch latest release: %v", err)
 		}
 		ref = latest
 	}
@@ -59,32 +61,42 @@ func main() {
 			} else if _, err2 := os.Stat(altPath2); err2 == nil {
 				path = altPath2
 			} else {
-				log.Fatalf("Specified file not found: %s (also checked %s and %s)", *singleFile, altPath1, altPath2)
+				klog.Fatalf("Specified file not found: %s (also checked %s and %s)", *singleFile, altPath1, altPath2)
 			}
 		}
 		files = []string{path}
 	} else {
 		files, err = findMarkdownFiles("content")
 		if err != nil {
-			log.Fatalf("Failed to find markdown files: %v", err)
+			klog.Fatalf("Failed to find markdown files: %v", err)
 		}
 	}
 
-	log.Printf("Processing %d markdown file(s) in mode: %s (ref/path: %s)...", len(files), mode, ref)
+	klog.V(1).Infof("Processing %d markdown file(s) in mode: %s (ref/path: %s)...", len(files), mode, ref)
 
 	var processedCount int
 	var errorCount int
+	var changedCount int
 	for _, file := range files {
-		log.Printf("Syncing code snippets for %s...", file)
-		if err := processMarkdownFile(file, mode, ref); err != nil {
-			log.Printf("Error processing %s: %v", file, err)
+		klog.V(1).Infof("Syncing code snippets for %s...", file)
+		changed, err := processMarkdownFile(file, mode, ref)
+		if err != nil {
+			klog.V(1).Infof("Error processing %s: %v", file, err)
 			errorCount++
 		} else {
+			if changed {
+				fmt.Printf("✅ Updated %s\n", file)
+				changedCount++
+			}
 			processedCount++
 		}
 	}
 
-	log.Printf("Sync complete. %d files successfully processed, %d errors.", processedCount, errorCount)
+	if changedCount == 0 {
+		fmt.Println("✅ No updates found.")
+	}
+
+	klog.V(1).Infof("Sync complete. %d files successfully processed, %d errors.", processedCount, errorCount)
 	if errorCount > 0 {
 		os.Exit(1)
 	}
@@ -187,7 +199,7 @@ func getFileContent(mode, value, filePath string) ([]byte, error) {
 	// Try fallback by replacing "_" with "-" in the file path.
 	fallbackPath := strings.ReplaceAll(filePath, "_", "-")
 	if fallbackPath != filePath {
-		log.Printf("File %s not found. Trying fallback path: %s", filePath, fallbackPath)
+		klog.V(1).Infof("File %s not found. Trying fallback path: %s", filePath, fallbackPath)
 		fallbackContent, fallbackErr := getFileContentRaw(mode, value, fallbackPath)
 		if fallbackErr == nil {
 			return fallbackContent, nil
@@ -360,11 +372,11 @@ func findMarkdownFiles(dir string) ([]string, error) {
 }
 
 // processMarkdownFile reads the markdown file, parses sync_code instructions, fetches/injects snippets,
-// and saves the updated content atomically.
-func processMarkdownFile(mdPath string, mode, value string) error {
+// and saves the updated content atomically. Returns true if the file was modified and successfully updated.
+func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 	content, err := os.ReadFile(mdPath)
 	if err != nil {
-		return fmt.Errorf("failed to read markdown file: %w", err)
+		return false, fmt.Errorf("failed to read markdown file: %w", err)
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -408,7 +420,7 @@ func processMarkdownFile(mdPath string, mode, value string) error {
 			// Fetch the target snippet
 			snippetLines, err := getSnippet(targetFile, targetTag)
 			if err != nil {
-				return fmt.Errorf("error resolving snippet for %s (tag=%s): %w", targetFile, targetTag, err)
+				return false, fmt.Errorf("error resolving snippet for %s (tag=%s): %w", targetFile, targetTag, err)
 			}
 
 			// Adjust the common leading indentation
@@ -488,15 +500,15 @@ func processMarkdownFile(mdPath string, mode, value string) error {
 	}
 
 	if !modified {
-		log.Printf("No modifications needed for %s", mdPath)
-		return nil
+		klog.V(1).Infof("No modifications needed for %s", mdPath)
+		return false, nil
 	}
 
 	// Atomic file update: write to a temporary file first, then rename.
 	dir := filepath.Dir(mdPath)
 	tempFile, err := os.CreateTemp(dir, "sync_code_tmp_*.md")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
+		return false, fmt.Errorf("failed to create temporary file: %w", err)
 	}
 	tempPath := tempFile.Name()
 	defer func() {
@@ -509,16 +521,16 @@ func processMarkdownFile(mdPath string, mode, value string) error {
 	outputContent := strings.Join(newLines, "\n")
 	if _, err := tempFile.Write([]byte(outputContent)); err != nil {
 		tempFile.Close()
-		return fmt.Errorf("failed to write to temporary file: %w", err)
+		return false, fmt.Errorf("failed to write to temporary file: %w", err)
 	}
 	if err := tempFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary file: %w", err)
+		return false, fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
 	if err := os.Rename(tempPath, mdPath); err != nil {
-		return fmt.Errorf("failed to atomically rename temporary file to destination %s: %w", mdPath, err)
+		return false, fmt.Errorf("failed to atomically rename temporary file to destination %s: %w", mdPath, err)
 	}
 
-	log.Printf("Successfully updated %s", mdPath)
-	return nil
+	klog.V(1).Infof("Successfully updated %s", mdPath)
+	return true, nil
 }
