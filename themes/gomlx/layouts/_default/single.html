@@ -14,7 +14,7 @@
     {{ range hugo.Data.docsnav }}{{ range .pages }}{{ $curated = $curated | append (.url | absURL) }}{{ end }}{{ end }}
     {{ $uncurated := slice }}
     {{ range site.RegularPages }}
-    {{ if not (in $curated .Permalink) }}{{ $uncurated = $uncurated | append . }}{{ end }}
+    {{ if not (in $curated .RelPermalink) }}{{ $uncurated = $uncurated | append . }}{{ end }}
     {{ end }}
     {{ if $uncurated }}
     {{ end }}
