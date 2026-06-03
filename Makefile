@@ -2,7 +2,7 @@
 # Usage: make <target>
 
 HUGO        := hugo
-.PHONY: help dev build sync clean
+.PHONY: help dev build sync clean sync_docs sync_code
 
 help:
 	@echo ""
