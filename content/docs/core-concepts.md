@@ -24,10 +24,8 @@ computations. Create one at program startup and reuse it everywhere:
 <!-- sync_code: file=core_concepts/graph/main.go tag=backend -->
 ```go
 import (
-	"fmt"
-
 	"github.com/gomlx/compute"
-	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends: "go", "xla:cpu", "xla:cuda", etc.
+	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
 )
 
 	backend := compute.MustNew() // auto-selects best available backend

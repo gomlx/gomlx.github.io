@@ -1,12 +1,14 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -34,6 +36,14 @@ func main() {
 	if err != nil {
 		klog.Fatalf("Error parsing flags: %v", err)
 	}
+
+	defer func() {
+		if cachedRepoPath != "" {
+			tempDir := filepath.Dir(cachedRepoPath)
+			klog.V(1).Infof("Cleaning up temporary repository directory: %s", tempDir)
+			_ = os.RemoveAll(tempDir)
+		}
+	}()
 
 	// Resolve "latest" version to the actual release tag if needed.
 	if mode == "version" && ref == "latest" {
@@ -383,10 +393,12 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 	var newLines []string
 
 	// Match: <!-- sync_code: file=<file_path> tag=<tag> -->
-	reComment := regexp.MustCompile(`^\s*<!--\s*sync_code:\s*file=(\S+)\s+tag=(\S+)\s*-->\s*$`)
+	// or:    <!-- sync_code: file=<file_path> output_tag=<tag> -->
+	reComment := regexp.MustCompile(`^\s*<!--\s*sync_code:\s*file=(\S+)\s+(tag|output_tag)=(\S+)\s*-->\s*$`)
 
-	// Cache to prevent repetitive requests/reads for the same files in a markdown document.
+	// Cache to prevent repetitive requests/reads/executions for the same files.
 	fileSnippetsCache := make(map[string]map[string][]string)
+	fileOutputCache := make(map[string]map[string][]string)
 
 	getSnippet := func(filePath, tag string) ([]string, error) {
 		snippets, ok := fileSnippetsCache[filePath]
@@ -406,6 +418,24 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 		return lines, nil
 	}
 
+	getOutputSnippet := func(filePath, tag string) ([]string, error) {
+		snippets, ok := fileOutputCache[filePath]
+		if !ok {
+			outputBytes, err := runGoProgram(mode, value, filePath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to run Go program: %w", err)
+			}
+			snippets = parseOutputSnippets(string(outputBytes))
+			fileOutputCache[filePath] = snippets
+		}
+
+		lines, ok := snippets[tag]
+		if !ok {
+			return nil, fmt.Errorf("output tag %q not found in program output", tag)
+		}
+		return lines, nil
+	}
+
 	i := 0
 	modified := false
 	for i < len(lines) {
@@ -415,16 +445,32 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 		matches := reComment.FindStringSubmatch(line)
 		if matches != nil {
 			targetFile := matches[1]
-			targetTag := matches[2]
+			isOutput := matches[2] == "output_tag"
+			targetTag := matches[3]
 
 			// Fetch the target snippet
-			snippetLines, err := getSnippet(targetFile, targetTag)
-			if err != nil {
-				return false, fmt.Errorf("error resolving snippet for %s (tag=%s): %w", targetFile, targetTag, err)
+			var snippetLines []string
+			var err error
+			if isOutput {
+				snippetLines, err = getOutputSnippet(targetFile, targetTag)
+				if err != nil {
+					return false, fmt.Errorf("error resolving output snippet for %s (tag=%s): %w", targetFile, targetTag, err)
+				}
+			} else {
+				snippetLines, err = getSnippet(targetFile, targetTag)
+				if err != nil {
+					return false, fmt.Errorf("error resolving code snippet for %s (tag=%s): %w", targetFile, targetTag, err)
+				}
 			}
 
 			// Adjust the common leading indentation
+			snippetLines = trimTrailingEmptyLines(snippetLines)
 			adjustedSnippet := adjustIndentation(snippetLines)
+
+			fenceStart := "```go"
+			if isOutput {
+				fenceStart = "```"
+			}
 
 			// Look ahead to check if a code block follows the comment.
 			nextBlockStartIdx := -1
@@ -475,7 +521,7 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 					}
 
 					// Append the fresh code block
-					newLines = append(newLines, "```go")
+					newLines = append(newLines, fenceStart)
 					newLines = append(newLines, adjustedSnippet...)
 					newLines = append(newLines, "```")
 
@@ -484,14 +530,14 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 				} else {
 					// Opening code fence found but no closing fence. We overwrite and append.
 					modified = true
-					newLines = append(newLines, "```go")
+					newLines = append(newLines, fenceStart)
 					newLines = append(newLines, adjustedSnippet...)
 					newLines = append(newLines, "```")
 				}
 			} else {
 				// No code block following the comment. Append the new code block.
 				modified = true
-				newLines = append(newLines, "```go")
+				newLines = append(newLines, fenceStart)
 				newLines = append(newLines, adjustedSnippet...)
 				newLines = append(newLines, "```")
 			}
@@ -533,4 +579,184 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 
 	klog.V(1).Infof("Successfully updated %s", mdPath)
 	return true, nil
+}
+
+// --- Execution & Parsing Helpers for Program Output ---
+
+var cachedRepoPath string
+
+// getRepoPath returns the absolute path of the repository root, downloading and extracting it if in remote mode.
+func getRepoPath(mode, value string) (string, error) {
+	if mode == "path" {
+		return filepath.Abs(value)
+	}
+
+	if cachedRepoPath != "" {
+		return cachedRepoPath, nil
+	}
+
+	klog.V(1).Infof("Remote mode detected. Downloading and extracting repository archive for ref %s...", value)
+
+	// Create a temp directory inside the current workspace
+	tempDir, err := os.MkdirTemp(".", "sync_code_repo_extract_*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+
+	// Fetch zipball URL from GitHub
+	zipballURL := fmt.Sprintf("https://api.github.com/repos/%s/zipball/%s", repoFullName, value)
+	zipData, err := doRequest(zipballURL)
+	if err != nil {
+		_ = os.RemoveAll(tempDir)
+		return "", fmt.Errorf("failed to download repository zipball: %w", err)
+	}
+
+	zipFilePath := filepath.Join(tempDir, "repo.zip")
+	if err := os.WriteFile(zipFilePath, zipData, 0644); err != nil {
+		_ = os.RemoveAll(tempDir)
+		return "", fmt.Errorf("failed to write zipball to disk: %w", err)
+	}
+
+	if err := unzip(zipFilePath, tempDir); err != nil {
+		_ = os.RemoveAll(tempDir)
+		return "", fmt.Errorf("failed to extract zipball: %w", err)
+	}
+	_ = os.Remove(zipFilePath)
+
+	entries, err := os.ReadDir(tempDir)
+	if err != nil || len(entries) == 0 {
+		_ = os.RemoveAll(tempDir)
+		return "", fmt.Errorf("extracted repository directory is empty")
+	}
+
+	var repoRoot string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			repoRoot = filepath.Join(tempDir, entry.Name())
+			break
+		}
+	}
+
+	if repoRoot == "" {
+		_ = os.RemoveAll(tempDir)
+		return "", fmt.Errorf("could not find repository root directory in extracted files")
+	}
+
+	absRepoRoot, err := filepath.Abs(repoRoot)
+	if err != nil {
+		_ = os.RemoveAll(tempDir)
+		return "", err
+	}
+
+	cachedRepoPath = absRepoRoot
+	return cachedRepoPath, nil
+}
+
+// unzip unpacks a ZIP archive into a destination directory.
+func unzip(src string, dest string) error {
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		fpath := filepath.Join(dest, f.Name)
+		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("illegal file path in zip: %s", fpath)
+		}
+
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return err
+		}
+
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			outFile.Close()
+			return err
+		}
+
+		_, err = io.Copy(outFile, rc)
+		outFile.Close()
+		rc.Close()
+
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runGoProgram executes "go run <file>" from the resolved repository root path.
+func runGoProgram(mode, value, filePath string) ([]byte, error) {
+	repoPath, err := getRepoPath(mode, value)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository path: %w", err)
+	}
+
+	relPath := filepath.Join("examples", "gomlx.github.io", filePath)
+	fullPath := filepath.Join(repoPath, relPath)
+	if _, err := os.Stat(fullPath); err != nil {
+		fallbackRelPath := strings.ReplaceAll(relPath, "_", "-")
+		fallbackFullPath := filepath.Join(repoPath, fallbackRelPath)
+		if _, errFallback := os.Stat(fallbackFullPath); errFallback == nil {
+			relPath = fallbackRelPath
+			fullPath = fallbackFullPath
+		}
+	}
+
+	cmd := exec.Command("go", "run", relPath)
+	cmd.Dir = repoPath
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	klog.V(1).Infof("Running command: go run %s (Dir: %s)", relPath, repoPath)
+	err = cmd.Run()
+	if err != nil {
+		return nil, fmt.Errorf("go run failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	return []byte(stdout.String()), nil
+}
+
+// parseOutputSnippets parses stdout lines matching `md:<tag>` blocks.
+func parseOutputSnippets(output string) map[string][]string {
+	snippets := make(map[string][]string)
+	lines := strings.Split(output, "\n")
+
+	reTag := regexp.MustCompile(`^md:([a-zA-Z0-9_\-]+)$`)
+	var currentTag string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if matches := reTag.FindStringSubmatch(trimmed); matches != nil {
+			currentTag = matches[1]
+			continue
+		}
+		if currentTag != "" {
+			snippets[currentTag] = append(snippets[currentTag], line)
+		}
+	}
+	return snippets
+}
+
+// trimTrailingEmptyLines removes trailing empty/whitespace-only lines from a slice of string lines.
+func trimTrailingEmptyLines(lines []string) []string {
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
