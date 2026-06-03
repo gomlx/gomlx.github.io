@@ -28,6 +28,7 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
 )
 ```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L12">(See source)</a></small></div>
 
 Output:
 
@@ -74,9 +75,9 @@ addExec := MustNewExec(backend, addFn)
 fmt.Printf("\t- 1+1=%s\n", addExec.MustCall1(1.0, 1.0))
 fmt.Printf("\t- 2+2=%s\n", addExec.MustCall1(2.0, 2.0))
 ```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L12">(See source)</a></small></div>
 
 Output:
-
 
 <!-- sync_code: file=core_concepts/graph/main.go output_tag=cell2 -->
 ```
@@ -86,37 +87,54 @@ Output:
 ```
 
 {{< callout type="note" >}}
-- The `addFn` was called only once to build the graph. After the graph was built and compiled, it was simply executed twice iwth `addExec.MustCall1()`. 
+- The `addFn` was called only once to build the graph -- hence the message "* building addFn" was only printed once. 
+  After the graph was built and compiled, it was simply executed twice iwth `addExec.MustCall1()`. 
 - We _dot imported_ the package `. "github.com/gomlx/gomlx/core/graph"`. This is common practice when most of the file contents are graph building blocks. 
 {{< /callout >}}
 
 
 ### Why graphs?
 
-This design gives XLA visibility over the entire computation so it can apply aggressive optimizations: operator fusion, memory layout selection, etc. — automatically.
+This design gives the backend (XLA in this case) visibility over the entire computation so it can apply aggressive optimizations: operator fusion, memory layout selection, etc. — automatically.
 
-Your Go code never runs on the GPU. Only the *compiled graph* runs there. This is the same design used by JAX `@jax.jit` and TensorFlow's `@tf.function`.
+Your Go code never runs on the GPU (or whatever is the accelerator). Only the *compiled graph* runs there. This is the same design used by JAX `@jax.jit` and TensorFlow's `@tf.function`.
 
-### Nodes are values, not tensors
+### Nodes are "future values", not concrete tensors
 
-Inside a graph function, `*graph.Node` represents a future value. You cannot inspect its contents during graph construction — only after calling `.Call()`. Operations on nodes describe the graph structure.
+Inside a graph function, a `*graph.Node` represents a future value. You cannot inspect its contents during graph construction — only after calling `.Call()` (or equivalent, like `.MustCall1`).
+Operations on nodes describe the graph structure.
 
+The `*graph.Node` does carry information about the shape (dimensions and data type) of the value though, and they are used during graph building to check compatibility 
+of the nodes for the operations -- e.g.: adding an `int` to a `float`, or values with different ranks are not valid operations, and return
+an error.
+
+<!-- sync_code: file=core_concepts/graph/main.go tag=cell3 -->
 ```go
-// This is graph construction — no computation happens here
-x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32, 3))
-y := graph.Mul(x, graph.Const(g, float32(2.0)))
-z := graph.ReduceSum(y, 0) // sum all elements
+_, err := addExec.Call1(int32(1), float32(1.0))
+if err != nil {
+	//...
+}
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L40">(See source)</a></small></div>
 
-// This executes the compiled graph on-device
-result := compiledFn.Call(xTensor) // returns a *tensors.Tensor
-fmt.Println(result.Value()) // []float32{...}
+Output:
+
+<!-- sync_code: file=core_concepts/graph/main.go output_tag=cell3 -->
+```
+* building addFn computation graph
+Error: cannot broadcast Int32 and Float32 for "Add": they have different dtypes
+	.../gomlx.github.io/core-concepts/graph/main.go:29
+	.../gomlx.github.io/core-concepts/graph/main.go:40
 ```
 
 ---
 
-## Shapes and Dtypes
+## Shapes (`shapes.Shape`) and data types (`dtypes.DType`)
 
-Every node has a **shape**: a list of dimension sizes, plus a dtype. GoMLX checks shape compatibility at graph construction time — mismatches are caught before any computation runs.
+Every node has a **shape**: a list of dimension sizes, plus a dtype -- and optionally names is using dynamic shapes. 
+GoMLX checks shape compatibility at graph construction time — mismatches are caught before any computation runs (see example above).
+
+
 
 ```go
 // Shape: [batch, height, width, channels]
