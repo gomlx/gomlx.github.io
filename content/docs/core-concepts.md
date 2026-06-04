@@ -135,41 +135,186 @@ Error: cannot broadcast Int32 and Float32 for "Add": they have different dtypes
 
 ## Tensors
 
+Tensors hold the inputs and outputs of a graph computation. They represent concrete multi-dimensional array values (from scalar 0D to arbitrary dimensions), defined by their **shape** (which specifies the dimensions and a data type, or `DType`).
 
 ### Shapes and data types (dtypes)
 
-Every node has a **shape**: a list of dimension sizes, plus a dtype -- and optionally names is using dynamic shapes. 
-GoMLX checks shape compatibility at graph construction time — mismatches are caught before any computation runs (see example above).
+Every tensor has a shape (e.g. `(Float32)[2, 2]`), a list of dimension sizes, plus a `DType`. GoMLX checks shape compatibility at graph construction time, catching mismatches before any computation starts.
 
-Common dtypes: `dtypes.Float32`, `dtypes.Float64`, `dtypes.Int32`, `dtypes.Int64`, `dtypes.Bool`.
+You can construct [Tensor](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/tensor.go) objects from standard Go values (like multi-dimensional slices) using [FromValue](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/local.go#L799):
+
+<!-- sync_code: file=core_concepts/tensors/main.go tag=create -->
+```go
+// Tensors can be created from Go values, such as multi-dimensional slices
+t := tensors.FromValue([][]float32{{1.0, 2.0}, {3.0, 4.0}})
+fmt.Printf("Tensor shape: %s\n", t.Shape())
+fmt.Printf("Tensor Go value: %v\n", t.Value())
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/tensors/main.go#L20">(See source)</a></small></div>
+
+Output:
+
+<!-- sync_code: file=core_concepts/tensors/main.go output_tag=create -->
+```
+Tensor shape: (Float32)[2, 2]
+Tensor Go value: [[1 2] [3 4]]
+```
+
+Common dtypes include `dtypes.Float32`, `dtypes.Float64`, `dtypes.Int32`, `dtypes.Int64`, and `dtypes.Bool`.
+
+### Host vs. Device memory
+
+Behind the scenes, a [Tensor](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/tensor.go) maintains synchronization between its memory representation in host RAM (local CPU) and accelerator device memory (GPU/TPU):
+
+<!-- sync_code: file=core_concepts/tensors/main.go tag=sync -->
+```go
+// Tensors cache data both locally (host CPU) and on accelerator devices.
+// Transferring data between CPU and devices has a cost and is done lazily.
+fmt.Printf("Has local copy? %v\n", t.HasLocal())
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/tensors/main.go#L31">(See source)</a></small></div>
+
+Output:
+
+<!-- sync_code: file=core_concepts/tensors/main.go output_tag=sync -->
+```
+Has local copy? true
+```
+
+To avoid expensive memory copies, transferring data between host and device is performed lazily only when needed.
+
+### Finalizing Tensors
+
+Since the Go Garbage Collector cannot see memory allocated on accelerator devices (like CUDA GPUs), accelerator device memory is best if explicitly managed. 
+When you are done with a tensor, you should explicitly call `FinalizeAll` (or `MustFinalizeAll`) to free its device buffers -- the GC will also free
+the memory, but it may hold to it too long.
+
+<!-- sync_code: file=core_concepts/tensors/main.go tag=finalize -->
+```go
+// Tensors allocate memory on accelerator devices (GPU, TPU).
+// Because the Go Garbage Collector cannot track device memory,
+// you must finalize tensors that are no longer in use to prevent memory leaks.
+t.MustFinalizeAll()
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/tensors/main.go#L41">(See source)</a></small></div>
+
+### Images
+
+The `github.com/gomlx/gomlx/core/tensors/images` package provides utilities to load standard Go images into tensors and export them back. When loading image batches, the resulting tensor shape is `[batch_size, height, width, channels]`:
+
+<!-- sync_code: file=core_concepts/tensors/main.go tag=image -->
+```go
+// Create two simple blank images (e.g. 100x100 RGB).
+img1 := image.NewRGBA(image.Rect(0, 0, 100, 100))
+img2 := image.NewRGBA(image.Rect(0, 0, 100, 100))
+
+// Load the batch of images into a Float32 tensor.
+// The resulting shape is [batch_size, height, width, channels].
+imagesTensor := timages.ToTensor(dtypes.Float32).Batch([]image.Image{img1, img2})
+fmt.Printf("Batch images shape: %s\n", imagesTensor.Shape())
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/tensors/main.go#L49">(See source)</a></small></div>
+
+Output:
+
+<!-- sync_code: file=core_concepts/tensors/main.go output_tag=image -->
+```
+Batch images shape: (Float32)[2, 100, 100, 3]
+```
 
 ---
 
-## The `model.Store`
+## The `model.Store` and Scopes
 
-The **store** is a hierarchical store for model parameters. Think of it as the model's named weight dictionary, with Go's type safety built in.
+To build trainable models, you need a way to declare, retrieve, and update parameters (weights and biases) that persist across graph executions. The [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) is a hierarchical (tree-like) store for model parameters (represented by [Variable](file:///home/janpf/Projects/gomlx/gomlx/ml/model/variable.go)) and hyperparameters.
 
+### Model Variables and Executors
+
+Instead of using the basic `graph.Exec`, neural network architectures use [Exec](file:///home/janpf/Projects/gomlx/gomlx/ml/model/exec.go). It is constructed with a [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) and automatically handles passing variables as extra inputs and outputs to the compiled graph.
+
+Here is a simple counter that increments a variable in the store on each step:
+
+<!-- sync_code: file=core_concepts/store/main.go tag=counter -->
 ```go
-import "github.com/gomlx/gomlx/ml/context"
-
-ctx := context.New()
-
-// Inside a graph function, variables are created or retrieved by name
-func denseLayer(scope *context.Context, x *graph.Node, units int) *graph.Node {
-    w := ctx.WithInitializer(initializers.GlorotUniform).
-        VariableWithShape("weights", shapes.Make(dtypes.Float32, x.Shape().Dim(-1), units))
-    b := ctx.VariableWithShape("bias", shapes.Make(dtypes.Float32, units))
-    return graph.Add(graph.MatMul(x, w.ValueGraph(x.Graph())), b.ValueGraph(x.Graph()))
+store := model.NewStore()
+counterFn := func(ctx *model.Scope, g *Graph) *Node {
+	counterVar := ctx.VariableWithValue("counter", int32(0))
+	counter := AddScalar(counterVar.NodeValue(g), 1)
+	counterVar.SetNodeValue(counter)
+	return counter
 }
+
+exec := model.MustNewExec(backend, store, counterFn)
+fmt.Printf("Step 1: %v\n", exec.MustCall1())
+fmt.Printf("Step 2: %v\n", exec.MustCall1())
+fmt.Printf("Step 3: %v\n", exec.MustCall1())
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/store/main.go#L39">(See source)</a></small></div>
+
+Output:
+
+<!-- sync_code: file=core_concepts/store/main.go output_tag=counter -->
+```
+Step 1: int32(1)
+Step 2: int32(2)
+Step 3: int32(3)
 ```
 
-### Scoping
+Inside the model function, `ctx.VariableWithValue` retrieves or initializes the variable, `counterVar.NodeValue(g)` returns the node representing its current value, and `counterVar.SetNodeValue(counter)` updates its value in the store with the computation result.
 
-Use `ctx.In("name")` to create named sub-scopes, which keeps weight names unique across layers:
+### Scopes and Hierarchical Parameters
 
+A [Scope](file:///home/janpf/Projects/gomlx/gomlx/ml/model/scope.go) represents a path in the hierarchical store (similar to directories). When building complex model architectures, scopes allow you to separate variables of different layers.
+
+Here is an example of defining a custom `denseLayer` function and applying it to different sub-scopes using `ctx.In`:
+
+<!-- sync_code: file=core_concepts/store/main.go tag=scopes -->
 ```go
-x = denseLayer(ctx.In("layer1"), x, 128) // weights stored at "layer1/weights"
-x = denseLayer(ctx.In("layer2"), x, 64)  // weights stored at "layer2/weights"
+func denseLayer(ctx *model.Scope, x *Node, outputDims int) *Node {
+g := x.Graph()
+dtype := x.DType()
+inputDims := x.Shape().Dimensions[1] // x shape is [batch, inputDims]
+
+// Create weights and biases in the current scope
+weights := ctx.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
+biases := ctx.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
+
+// Compute x * weights + biases
+return Add(Dot(x, weights).Product(), biases)
+}
+
+modelFn := func(ctx *model.Scope, x *Node) *Node {
+	// Use ctx.In to partition variable names under sub-scopes:
+	h := denseLayer(ctx.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
+	y := denseLayer(ctx.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
+	return y
+}
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/store/main.go#L17">(See source)</a></small></div>
+
+Using `ctx.In("layer1")` ensures that the weights and biases of the first layer are stored under paths like `/layer1/weights` and `/layer1/biases`, avoiding conflicts with other layers.
+
+If we run the model function, we can inspect all of the variables registered in the store:
+
+<!-- sync_code: file=core_concepts/store/main.go tag=print_vars -->
+```go
+// We can inspect all variables in the store:
+for v := range store.IterVariables() {
+	fmt.Printf("Variable: %s, shape: %s\n", v.Path(), v.Shape())
+}
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/store/main.go#L76">(See source)</a></small></div>
+
+Output:
+
+<!-- sync_code: file=core_concepts/store/main.go output_tag=print_vars -->
+```
+Variable: /counter, shape: (Int32)
+Variable: /layer1/weights, shape: (Float32)[2, 3]
+Variable: /layer1/biases, shape: (Float32)[1, 3]
+Variable: /layer2/weights, shape: (Float32)[3, 1]
+Variable: /layer2/biases, shape: (Float32)[1, 1]
+Variable: /#rngState, shape: (Uint64)[3]
 ```
 
 ---
@@ -184,7 +329,7 @@ func main() {
     backend := compute.New()
 
     // 2. Create a store to hold weights
-    store := model.New()
+    store := model.NewStore()
 
     // 3. Define your model as a graph function
     trainer := train.NewTrainer(backend, store, myModelFn,
@@ -200,4 +345,4 @@ func main() {
 
 Each of these pieces — backend, graph, store, trainer — is independently replaceable. You can swap the trainer, optimizer, the backend, or the loss function without touching the rest of .
 
-Other related topics: **datasets**, **Hyperparameters**, **Losses**, **Optimizers**, **Metrics**.
+Other related topics: **datasets**, **Hyperparameters**, **Losses**, **Optimizers**, **Metrics**. <!-- link to future topics with their own pages -->
