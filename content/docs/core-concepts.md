@@ -1,17 +1,17 @@
 ---
 title: "Core Concepts"
-lead: "Understand the three building blocks of every GoMLX program: the backend manager, computation graphs, and the context."
+lead: "Understand the main building blocks of every GoMLX program: backends, computation graphs, tensors and stores."
 weight: 3
 ---
 
 ## Overview
 
-GoMLX is built on three layered abstractions. Understanding them makes every other part of the library click:
+GoMLX is built on a few abstractions. Understanding them makes every other part of the library click:
 
 1. **Backend** — the connection to a hardware backend (CPU, GPU, TPU).
 2. **Graph** — a computation graph that you define as a pure Go function.
 3. **Tensor** — a concrete multi-dimensional array (or scalar) value, used as input and output when executing graphs. 
-3. **Store** — a scoped storage for named and typed model parameters (weights), as well as hyperparameters of a model.
+4. **Store** — a scoped storage for named and typed model parameters (weights), as well as hyperparameters of a model.
 
 You can use just the backend and graph for mathematical computing, or add a `Store` to build trainable models.
 
@@ -237,8 +237,8 @@ Here is a simple counter that increments a variable in the store on each step:
 <!-- sync_code: file=core_concepts/store/main.go tag=counter -->
 ```go
 store := model.NewStore()
-counterFn := func(ctx *model.Scope, g *Graph) *Node {
-	counterVar := ctx.VariableWithValue("counter", int32(0))
+counterFn := func(scope *model.Scope, g *Graph) *Node {
+	counterVar := scope.VariableWithValue("counter", int32(0))
 	counter := AddScalar(counterVar.NodeValue(g), 1)
 	counterVar.SetNodeValue(counter)
 	return counter
@@ -260,39 +260,39 @@ Step 2: int32(2)
 Step 3: int32(3)
 ```
 
-Inside the model function, `ctx.VariableWithValue` retrieves or initializes the variable, `counterVar.NodeValue(g)` returns the node representing its current value, and `counterVar.SetNodeValue(counter)` updates its value in the store with the computation result.
+Inside the model function, `scope.VariableWithValue` retrieves or initializes the variable, `counterVar.NodeValue(g)` returns the node representing its current value, and `counterVar.SetNodeValue(counter)` updates its value in the store with the computation result.
 
 ### Scopes and Hierarchical Parameters
 
 A [Scope](file:///home/janpf/Projects/gomlx/gomlx/ml/model/scope.go) represents a path in the hierarchical store (similar to directories). When building complex model architectures, scopes allow you to separate variables of different layers.
 
-Here is an example of defining a custom `denseLayer` function and applying it to different sub-scopes using `ctx.In`:
+Here is an example of defining a custom `denseLayer` function and applying it to different sub-scopes using `scope.In`:
 
 <!-- sync_code: file=core_concepts/store/main.go tag=scopes -->
 ```go
-func denseLayer(ctx *model.Scope, x *Node, outputDims int) *Node {
+func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
 g := x.Graph()
 dtype := x.DType()
 inputDims := x.Shape().Dimensions[1] // x shape is [batch, inputDims]
 
 // Create weights and biases in the current scope
-weights := ctx.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
-biases := ctx.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
+weights := scope.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
+biases := scope.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
 
 // Compute x * weights + biases
 return Add(Dot(x, weights).Product(), biases)
 }
 
-modelFn := func(ctx *model.Scope, x *Node) *Node {
-	// Use ctx.In to partition variable names under sub-scopes:
-	h := denseLayer(ctx.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
-	y := denseLayer(ctx.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
+modelFn := func(scope *model.Scope, x *Node) *Node {
+	// Use scope.In to partition variable names under sub-scopes:
+	h := denseLayer(scope.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
+	y := denseLayer(scope.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
 	return y
 }
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/store/main.go#L17">(See source)</a></small></div>
 
-Using `ctx.In("layer1")` ensures that the weights and biases of the first layer are stored under paths like `/layer1/weights` and `/layer1/biases`, avoiding conflicts with other layers.
+Using `scope.In("layer1")` ensures that the weights and biases of the first layer are stored under paths like `/layer1/weights` and `/layer1/biases`, avoiding conflicts with other layers.
 
 If we run the model function, we can inspect all of the variables registered in the store:
 
@@ -321,28 +321,102 @@ Variable: /#rngState, shape: (Uint64)[3]
 
 ## Training a Model
 
-Here is the minimal skeleton of a trainable GoMLX program:
+Training a model in GoMLX brings together all the building blocks: the backend, the [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) for tracking weights, [Dataset](file:///home/janpf/Projects/gomlx/gomlx/ml/dataset/inmemory.go) iteration, and the [Trainer](file:///home/janpf/Projects/gomlx/gomlx/ml/train/trainer.go#L169) / [Loop](file:///home/janpf/Projects/gomlx/gomlx/ml/train/loop.go).
 
+Here is a complete, working example that trains a small Multi-Layer Perceptron (MLP) to overfit (memorize) an image. The network learns a function $f(x, y) \to (r, g, b)$ that maps normalized pixel coordinates to the corresponding color at that location:
+
+<!-- sync_code: file=core_concepts/training/main.go tag=training -->
 ```go
-func main() {
-    // 1. Connect to hardware
-    backend := compute.New()
+// 1. Prepare training data: mapping (x, y) coordinates to (r, g, b) colors
+inputs := make([][]float32, 0, width*height)
+labels := make([][]float32, 0, width*height)
 
-    // 2. Create a store to hold weights
-    store := model.NewStore()
+for y := range height {
+	for x := range width {
+		// Normalize coordinates to [-1.0, 1.0] for stable neural network training
+		nx := float32(x)/float32(width)*2.0 - 1.0
+		ny := float32(y)/float32(height)*2.0 - 1.0
+		inputs = append(inputs, []float32{nx, ny})
 
-    // 3. Define your model as a graph function
-    trainer := train.NewTrainer(backend, store, myModelFn,
-        losses.SparseCategoricalCrossEntropyLogits,
-        optimizers.Adam(),
-    )
-
-    // 4. Run the training loop
-    loop := train.NewLoop(trainer)
-    loop.RunSteps(trainDataset, 10_000)
+		r, g, b, _ := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
+		labels = append(labels, []float32{float32(r) / 65535.0, float32(g) / 65535.0, float32(b) / 65535.0})
+	}
 }
+
+backend := compute.MustNew()
+store := model.NewStore()
+
+// 2. Create an InMemoryDataset from the prepared coordinates and pixel colors
+ds, err := dataset.InMemoryFromData(backend, "image_pixels", []any{inputs}, []any{labels})
+if err != nil {
+	log.Fatalf("failed to create dataset: %v", err)
+}
+// Configure dataset to yield random batches of size 128 continuously (infinitely)
+ds.BatchSize(512, false).Shuffle().Infinite(true)
+
+// 3. Define the neural network model function (MLP)
+modelFn := func(scope *model.Scope, spec any, inputs []*Node) []*Node {
+	x := inputs[0] // shape: [batch_size, 2]
+
+	h := denseLayer(scope.In("layer1"), x, 64)
+	h = activation.Relu(h)
+	h = denseLayer(scope.In("layer2"), h, 64)
+	h = activation.Relu(h)
+	h = denseLayer(scope.In("layer3"), h, 64)
+	h = activation.Relu(h)
+
+	// Output RGB values mapped to [0.0, 1.0] using Sigmoid
+	y := Sigmoid(denseLayer(scope.In("output"), h, 3))
+	return []*Node{y}
+}
+
+// 4. Initialize Trainer with Adam optimizer and Mean Squared Error (MSE) loss
+trainer := train.NewTrainer(
+	backend,
+	store,
+	modelFn,
+	loss.MeanSquaredError,
+	optimizer.Adam().LearningRate(0.003).Done(),
+	nil, // Train step metrics (optional)
+	nil, // Eval metrics (optional)
+)
+
+// 5. Run the training loop for -steps (default 5000) steps
+loop := train.NewLoop(trainer)
+// Register a simple callback to print loss metrics periodically
+train.EveryNSteps(loop, 1000, "log_metrics", 0, func(l *train.Loop, metrics []*tensors.Tensor) error {
+	fmt.Printf("Step %5d: MSE Loss = %.6f (moving average = %.6f)\n", l.LoopStep, metrics[0].Value(), metrics[1].Value())
+	return nil
+})
+
+fmt.Println("Starting training loop...")
+_, err = loop.RunSteps(ds, *trainSteps)
+if err != nil {
+	log.Fatalf("training failed: %v", err)
+}
+fmt.Println("Training finished!")
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/training/main.go#L87">(See source)</a></small></div>
+
+Output:
+
+<!-- sync_code: file=core_concepts/training/main.go output_tag=training -->
+```
+Starting training loop...
+Step   999: MSE Loss = 0.000033 (moving average = 0.000037)
+Step  1999: MSE Loss = 0.000017 (moving average = 0.000021)
+Step  2999: MSE Loss = 0.000034 (moving average = 0.000021)
+Step  3999: MSE Loss = 0.000033 (moving average = 0.000021)
+Step  4999: MSE Loss = 0.000013 (moving average = 0.000018)
+Training finished!
+Successfully reconstructed image saved to reconstructed.png
 ```
 
-Each of these pieces — backend, graph, store, trainer — is independently replaceable. You can swap the trainer, optimizer, the backend, or the loss function without touching the rest of .
+Each of these pieces — the backend, layers, store, loss, optimizer, and training loop — is independently replaceable:
+- Swap out the Adam optimizer for `optimizers.StochasticGradientDescent()` or any other strategy.
+- Modify the neural network definition or layers without changing how the training loop or dataset works.
+- Switch the backend from CUDA GPU to Metal/CPU without altering any machine learning code.
 
-Other related topics: **datasets**, **Hyperparameters**, **Losses**, **Optimizers**, **Metrics**. <!-- link to future topics with their own pages -->
+That's what makes GoMLX powerful for research and experimentation.
+
+See more details in: **Datasets**, **Hyperparameters**, **Losses**, **Optimizers**, **Metrics**, **Checkpointing (Saving)** <!-- link to future topics with their own pages -->
