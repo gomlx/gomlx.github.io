@@ -22,7 +22,7 @@ You can use just the backend and graph for mathematical computing, or add a `Sto
 The `compute.Backend` connects your Go process to a hardware+software backend abstraction capable of executing our 
 computations. Create one at program startup and reuse it everywhere:
 
-<!-- sync_code: file=core_concepts/graph/main.go tag=cell1 -->
+<!-- sync_code: file=core-concepts/graph/main.go tag=cell1 -->
 ```go
 import (
 	"github.com/gomlx/compute"
@@ -33,7 +33,7 @@ import (
 
 Output:
 
-<!-- sync_code: file=core_concepts/graph/main.go output_tag=cell1 -->
+<!-- sync_code: file=core-concepts/graph/main.go output_tag=cell1 -->
 ```
 Backend: xla:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/go-xla/nvidia/pjrt_c_api_cuda_plugin.so) v0.100 [StableHLO] [1 device(s)]
 ```
@@ -65,7 +65,7 @@ connecting them.
 GoMLX provides the high-level API to build these graphs. 
 The computation graphs are then JIT-compiled and can be executed very efficiently by the selected backend.
 
-<!-- sync_code: file=core_concepts/graph/main.go tag=cell2 -->
+<!-- sync_code: file=core-concepts/graph/main.go tag=cell2 -->
 ```go
 import (
 	. "github.com/gomlx/gomlx/core/graph"
@@ -83,7 +83,7 @@ fmt.Printf("\t- 2+2=%s\n", addExec.MustCall(2.0, 2.0))
 
 Output:
 
-<!-- sync_code: file=core_concepts/graph/main.go output_tag=cell2 -->
+<!-- sync_code: file=core-concepts/graph/main.go output_tag=cell2 -->
 ```
 * building addFn computation graph: a.shape=(Float64), b.shape=(Float64)
 	- 1+1=float64(2)
@@ -112,7 +112,7 @@ The `*graph.Node` does carry information about the shape (dimensions and data ty
 of the nodes for the operations -- e.g.: adding an `int` to a `float`, or values with different ranks are not valid operations, and return
 an error.
 
-<!-- sync_code: file=core_concepts/graph/main.go tag=cell3 -->
+<!-- sync_code: file=core-concepts/graph/main.go tag=cell3 -->
 ```go
 _, err := addExec.Call(int32(1), float32(1.0))
 if err != nil {
@@ -123,7 +123,7 @@ if err != nil {
 
 Output:
 
-<!-- sync_code: file=core_concepts/graph/main.go output_tag=cell3 -->
+<!-- sync_code: file=core-concepts/graph/main.go output_tag=cell3 -->
 ```
 * building addFn computation graph: a.shape=(Int32), b.shape=(Float32)
 Error: cannot broadcast Int32 and Float32 for "Add": they have different dtypes
@@ -143,7 +143,7 @@ Every tensor has a shape (e.g. `(Float32)[2, 2]`), a list of dimension sizes, pl
 
 You can construct [Tensor](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/tensor.go) objects from standard Go values (like multi-dimensional slices) using [FromValue](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/local.go#L799):
 
-<!-- sync_code: file=core_concepts/tensors/main.go tag=create -->
+<!-- sync_code: file=core-concepts/tensors/main.go tag=create -->
 ```go
 // Tensors can be created from Go values, such as multi-dimensional slices
 t := tensors.FromValue([][]float32{{1.0, 2.0}, {3.0, 4.0}})
@@ -154,7 +154,7 @@ fmt.Printf("Tensor Go value: %v\n", t.Value())
 
 Output:
 
-<!-- sync_code: file=core_concepts/tensors/main.go output_tag=create -->
+<!-- sync_code: file=core-concepts/tensors/main.go output_tag=create -->
 ```
 Tensor shape: (Float32)[2, 2]
 Tensor Go value: [[1 2] [3 4]]
@@ -166,7 +166,7 @@ Common dtypes include `dtypes.Float32`, `dtypes.Float64`, `dtypes.Int32`, `dtype
 
 Behind the scenes, a [Tensor](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/tensor.go) maintains synchronization between its memory representation in host RAM (local CPU) and accelerator device memory (GPU/TPU):
 
-<!-- sync_code: file=core_concepts/tensors/main.go tag=sync -->
+<!-- sync_code: file=core-concepts/tensors/main.go tag=sync -->
 ```go
 // Tensors cache data both locally (host CPU) and on accelerator devices.
 // Transferring data between CPU and devices has a cost and is done lazily.
@@ -176,7 +176,7 @@ fmt.Printf("Has local copy? %v\n", t.HasLocal())
 
 Output:
 
-<!-- sync_code: file=core_concepts/tensors/main.go output_tag=sync -->
+<!-- sync_code: file=core-concepts/tensors/main.go output_tag=sync -->
 ```
 Has local copy? true
 ```
@@ -189,7 +189,7 @@ Since the Go Garbage Collector cannot see memory allocated on accelerator device
 When you are done with a tensor, you should explicitly call `FinalizeAll` (or `MustFinalizeAll`) to free its device buffers -- the GC will also free
 the memory, but it may hold to it too long.
 
-<!-- sync_code: file=core_concepts/tensors/main.go tag=finalize -->
+<!-- sync_code: file=core-concepts/tensors/main.go tag=finalize -->
 ```go
 // Tensors allocate memory on accelerator devices (GPU, TPU).
 // Because the Go Garbage Collector cannot track device memory,
@@ -202,7 +202,7 @@ t.MustFinalizeAll()
 
 The `github.com/gomlx/gomlx/core/tensors/images` package provides utilities to load standard Go images into tensors and export them back. When loading image batches, the resulting tensor shape is `[batch_size, height, width, channels]`:
 
-<!-- sync_code: file=core_concepts/tensors/main.go tag=image -->
+<!-- sync_code: file=core-concepts/tensors/main.go tag=image -->
 ```go
 // Create two simple blank images (e.g. 100x100 RGB).
 img1 := image.NewRGBA(image.Rect(0, 0, 100, 100))
@@ -217,7 +217,7 @@ fmt.Printf("Batch images shape: %s\n", imagesTensor.Shape())
 
 Output:
 
-<!-- sync_code: file=core_concepts/tensors/main.go output_tag=image -->
+<!-- sync_code: file=core-concepts/tensors/main.go output_tag=image -->
 ```
 Batch images shape: (Float32)[2, 100, 100, 3]
 ```
@@ -234,7 +234,7 @@ Instead of using the basic `graph.Exec`, neural network architectures use [Exec]
 
 Here is a simple counter that increments a variable in the store on each step:
 
-<!-- sync_code: file=core_concepts/store/main.go tag=counter -->
+<!-- sync_code: file=core-concepts/store/main.go tag=counter -->
 ```go
 store := model.NewStore()
 counterFn := func(scope *model.Scope, g *Graph) *Node {
@@ -253,7 +253,7 @@ fmt.Printf("Step 3: %v\n", exec.MustCall1())
 
 Output:
 
-<!-- sync_code: file=core_concepts/store/main.go output_tag=counter -->
+<!-- sync_code: file=core-concepts/store/main.go output_tag=counter -->
 ```
 Step 1: int32(1)
 Step 2: int32(2)
@@ -268,7 +268,7 @@ A [Scope](file:///home/janpf/Projects/gomlx/gomlx/ml/model/scope.go) represents 
 
 Here is an example of defining a custom `denseLayer` function and applying it to different sub-scopes using `scope.In`:
 
-<!-- sync_code: file=core_concepts/store/main.go tag=scopes -->
+<!-- sync_code: file=core-concepts/store/main.go tag=scopes -->
 ```go
 func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
 g := x.Graph()
@@ -296,7 +296,7 @@ Using `scope.In("layer1")` ensures that the weights and biases of the first laye
 
 If we run the model function, we can inspect all of the variables registered in the store:
 
-<!-- sync_code: file=core_concepts/store/main.go tag=print_vars -->
+<!-- sync_code: file=core-concepts/store/main.go tag=print_vars -->
 ```go
 // We can inspect all variables in the store:
 for v := range store.IterVariables() {
@@ -307,7 +307,7 @@ for v := range store.IterVariables() {
 
 Output:
 
-<!-- sync_code: file=core_concepts/store/main.go output_tag=print_vars -->
+<!-- sync_code: file=core-concepts/store/main.go output_tag=print_vars -->
 ```
 Variable: /counter, shape: (Int32)
 Variable: /layer1/weights, shape: (Float32)[2, 3]
@@ -325,7 +325,7 @@ Training a model in GoMLX brings together all the building blocks: the backend, 
 
 Here is a complete, working example that trains a small Multi-Layer Perceptron (MLP) to overfit (memorize) an image. The network learns a function $f(x, y) \to (r, g, b)$ that maps normalized pixel coordinates to the corresponding color at that location:
 
-<!-- sync_code: file=core_concepts/training/main.go tag=training -->
+<!-- sync_code: file=core-concepts/training/main.go tag=training -->
 ```go
 // 1. Prepare training data: mapping (x, y) coordinates to (r, g, b) colors
 inputs := make([][]float32, 0, width*height)
@@ -400,14 +400,14 @@ fmt.Println("Training finished!")
 
 Output:
 
-<!-- sync_code: file=core_concepts/training/main.go output_tag=training -->
+<!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000033 (moving average = 0.000037)
-Step  1999: MSE Loss = 0.000017 (moving average = 0.000021)
-Step  2999: MSE Loss = 0.000034 (moving average = 0.000021)
-Step  3999: MSE Loss = 0.000033 (moving average = 0.000021)
-Step  4999: MSE Loss = 0.000013 (moving average = 0.000018)
+Step   999: MSE Loss = 0.000022 (moving average = 0.000028)
+Step  1999: MSE Loss = 0.000021 (moving average = 0.000016)
+Step  2999: MSE Loss = 0.000025 (moving average = 0.000017)
+Step  3999: MSE Loss = 0.000017 (moving average = 0.000017)
+Step  4999: MSE Loss = 0.000018 (moving average = 0.000017)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```
