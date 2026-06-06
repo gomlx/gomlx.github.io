@@ -2,7 +2,7 @@
 title: "Error Handling"
 section: "Guides"
 weight: 60
-source: "https://github.com/gomlx/gomlx/blob/main/docs/error_handling.md"
+source: "file:///home/janpf/Projects/gomlx/gomlx/docs/error_handling.md"
 ---
 
 ## Compile time, Runtime, **Graph Building Time** and **Graph Execution Time**

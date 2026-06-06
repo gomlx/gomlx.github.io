@@ -2,7 +2,7 @@
 title: "CHANGELOG"
 section: "Guides"
 weight: 10
-source: "https://github.com/gomlx/gomlx/blob/main/docs/CHANGELOG.md"
+source: "file:///home/janpf/Projects/gomlx/gomlx/docs/CHANGELOG.md"
 ---
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
@@ -62,6 +62,7 @@ And a few small renaming:
 - `Scope` -> `Store` and `Scope`
 - `NewScope` -> `NewStore` (the only "global" one)
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
+  - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or three outputs.
 - Using mostly `fullPath` instead of the split scope/key pairs.
 - Variables:
   - `Scope.VariableWithValueGraph` -> `Scope.VariableWithNodeValue`
@@ -85,6 +86,7 @@ And a few small renaming:
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
+  - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or three outputs.
 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.

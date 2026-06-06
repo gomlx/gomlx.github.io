@@ -2,7 +2,7 @@
 title: "What is GoMLX?"
 section: "Get started"
 weight: 1
-source: "https://github.com/gomlx/gomlx/blob/main/README.md"
+source: "file:///home/janpf/Projects/gomlx/gomlx/README.md"
 ---
 
 # **_GoMLX_**, an Accelerated ML and Math Framework
@@ -66,6 +66,8 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 
 ## 🔮 Upcoming Features & Plans 🔮
 
+<img align="right" src="docs/gomlx_gopher_hiking.jpeg" alt="GoMLX Gopher" width="220px"/>
+
 **Large API and package re-organization coming soon in v0.28 release:**
 
 - `backends` moved to `github.com/gomlx/compute` repository!
@@ -122,8 +124,6 @@ tokenizer.
   * [Triplet Losses](https://github.com/gomlx/gomlx/blob/main/ml/train/losses/triplet.go): various negative sampling strategies as well as various distance metrics.
   * [AlphaZero AI for the game of Hive](https://github.com/janpfeifer/hiveGo/): it uses a trivial GNN to evaluate
     positions on the board. It includes a [WASM demo (runs GoMLX in the browser!)](https://janpfeifer.github.io/hiveGo/www/hive/) and a command-line UI to test your skills!
-
-### Backends
 
 
 > This page is excerpted from the [full README](https://github.com/gomlx/gomlx). For complete documentation, browse the sections in the sidebar.
