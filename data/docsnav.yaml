@@ -4,40 +4,46 @@
       url: docs/installation/
     - name: Overview
       url: docs/overview/
-    - name: Core concepts
+    - name: Core Concepts
       url: docs/core-concepts/
-    - name: Your first model
-      url: docs/first-model/
 
-- title: Reference
+- title: Core Guides
   pages:
-    - name: Graph execution
-      url: docs/graph-execution/
-    - name: Layers API
-      url: docs/layers/
-    - name: Training loops
-      url: docs/training-loops/
-    - name: Optimizers
-      url: docs/optimizers/
-    - name: Losses
-      url: docs/losses/
-    - name: Hyperparameters (with Context)
-      url: docs/hyperparameters/
-    - name: Plots & metrics
-      url: docs/plots-metrics/
-    - name: Context, Variables and Checkpointing
-      url: docs/context_variables_checkpointing/
-    - name: Backends
+    - name: Computation Graph
+      url: docs/computation-graph/
+    - name: Backend
       url: docs/backends/
+    - name: Tensor
+      url: docs/tensors/
+    - name: Model Store and Scope
+      url: docs/model-store/
 
-- title: Guides
+- title: Training & Layers
+  pages:
+    - name: Training Loop
+      url: docs/training-loop/
+    - name: Working with Datasets
+      url: docs/datasets/
+    - name: Layers Library
+      url: docs/layers/
+    - name: Optimizer
+      url: docs/optimizers/
+    - name: Loss
+      url: docs/losses/
+    - name: Metrics And Plots
+      url: docs/metrics-and-plots/
+    - name: Hyperparameters
+      url: docs/hyperparameters/
+
+- title: Ecosystem & Integrations
   pages:
     - name: Go Huggingface
       url: docs/go-huggingface/
     - name: ONNX-GoMLX
       url: docs/onnx-gomlx/
-    - name: Working with datasets
-      url: docs/datasets/
+
+- title: Advanced & Support
+  pages:
     - name: Developing
       url: docs/developing/
     - name: Debugging

@@ -15,6 +15,30 @@ GoMLX is built on a few abstractions. Understanding them makes every other part 
 
 You can use just the backend and graph for mathematical computing, or add a `Store` to build trainable models.
 
+### Conceptual Workflow
+
+Below is a visualization of how these core components interact when building, JIT-compiling, and running computations in GoMLX:
+
+```mermaid
+graph TD
+    subgraph Host ["Host CPU"]
+        GoCode["Go Code"]
+        Store["model.Store\n(Variables & Hyperparams)"]
+        GoCode -->|1. Build Graph| Graph["Symbolic Graph\n(graph.Graph and graph.Node)"]
+        GoCode -->|Create & Use Variables| Store
+        Graph -->|2. Compile| Exec["Executor\n(model.Exec)"]
+    end
+
+    subgraph BackendJIT ["Backend (GPU, CPU, TPU, etc.)"]
+		Backend["compute.Backend"]
+        Exec -->|"JIT-Compile\n(once per shape)"| Backend
+		Executable["Executable"]
+		Backend -->|Returns| Executable
+        Exec -->|"3. Call(Inputs...)"| Executable
+        Store <--> |"Auto Sync Variables\n(In/Out)"| Executable
+    end
+```
+
 ---
 
 ## Backend
@@ -28,21 +52,24 @@ import (
 	"github.com/gomlx/compute"
 	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
 )
+
+backend := compute.MustNew() // auto-selects best available backend
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L19">(See source)</a></small></div>
 
 Output:
 
 <!-- sync_code: file=core-concepts/graph/main.go output_tag=cell1 -->
 ```
-Backend: xla:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/go-xla/nvidia/pjrt_c_api_cuda_plugin.so) v0.100 [StableHLO] [1 device(s)]
+Backend: xla:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/go-xla/nvidia/pjrt_c_api_cuda_plugin.so) v0.112 [StableHLO] [1 device(s)]
 ```
 
-The backend owns the device memory, compiles graphs to native code, and manages data transfer between host and device.
+The backend owns the device memory, compiles graphs to native code, and manages data transfer between "host" (your normal CPU) and device 
+(can be the same CPU or a GPU, TPU, etc).
 One backend per process is the typical pattern.
 
 {{< callout type="note" >}}
-`compute.New()` selects the best available backend in order: CUDA GPU → Metal (Apple) → CPU. 
+The `compute.New()` (or the `compute.MustNew()`) selects the best available backend in order: CUDA GPU → Metal (Apple) → CPU. 
 To pin a specific backend, use the environment variable `GOMLX_BACKEND` or during construction
 use the form  `compute.NewWithConfig("go")`.
 {{< /callout >}}
@@ -51,9 +78,9 @@ The following backends are implemented so far:
 
 - **"go"**: Pure Go implementation: simple, very portable but slower. It works in WASM also (so it can be
   used in websites).
-- **"xla"** (or "xla:cpu", "xla:cuda", "xla:tpu"): uses [Google's XLA](https://openxla.org/), the same backend used by
+- **"xla"** (or `"xla:cpu"`, `"xla:cuda"`, `"xla:tpu"`; use `"xla:help"` for an error with its options): uses [Google's XLA](https://openxla.org/), the same backend used by
  TensorFlow, Jax and optionally by PyTorch.
-- [go-darwinml**](https://github.com/gomlx/go-darwinml): (**experimental, in development**) it provides
+- [**go-darwinml**](https://github.com/gomlx/go-darwinml): (**experimental, in development**) it provides
   the `CoreML` (ANE, GPU, CPU) and the `MPSGraph` (GPU/Metal) backends.
 
 ---
@@ -92,7 +119,7 @@ Output:
 
 {{< callout type="note" >}}
 - The `addFn` was called only once to build the graph -- hence the message "* building addFn" was only printed once. 
-  After the graph was built and compiled, it was simply executed twice iwth `addExec.MustCall1()`. 
+  After the graph was built and compiled, it was simply executed twice with `addExec.MustCall()`. 
 - We _dot imported_ the package `. "github.com/gomlx/gomlx/core/graph"`. This is common practice when most of the file contents are graph building blocks. 
 {{< /callout >}}
 
@@ -101,7 +128,7 @@ Output:
 
 This design gives the backend (XLA in this case) visibility over the entire computation so it can apply aggressive optimizations: operator fusion, memory layout selection, etc. — automatically.
 
-Your Go code never runs on the GPU (or whatever is the accelerator). Only the *compiled graph* runs there. This is the same design used by JAX `@jax.jit` and TensorFlow's `@tf.function`.
+Your Go code never runs on the GPU (or whatever is the accelerator device). Only the *compiled graph* runs there. This is the same design used by JAX `@jax.jit` and TensorFlow's `@tf.function`.
 
 ### Nodes are "future values", not concrete tensors
 
@@ -131,17 +158,32 @@ Error: cannot broadcast Int32 and Float32 for "Add": they have different dtypes
 	.../gomlx.github.io/core-concepts/graph/main.go:39
 ```
 
+### Exception-based Error Handling during Graph Building
+
+Unlike standard Go code where errors are returned as values, GoMLX graph building functions panic (throw exceptions) when shape or type mismatches are found.
+
+* **Why?** Writing long mathematical formulas would be cluttered and difficult to read if every operation returned an error.
+* **How it works:** Panics only occur during the graph construction phase. The `Exec` wrapper catches these panics automatically and returns them as standard Go errors (complete with stack traces) when `.Call()` is invoked.
+
+### Static Shapes & Recompilation Performance Trap
+
+Behind the scenes, the backend compiles the computation graph to a highly optimized native binary for the target hardware. However, this JIT compilation is strictly tied to the **static shape** (the dimensions and data type) of the input nodes.
+
+* **The Trap:** If you pass inputs of varying shapes (such as changing batch sizes or sequence lengths) to `Exec.Call`, GoMLX will JIT-compile a new graph for every new shape it sees. Since JIT compiling a graph is orders of magnitude slower than executing it, this will severely degrade performance.
+* **Best Practice:** Reuse input shapes whenever possible. If your batch or sequence sizes vary, pad your inputs to fixed sizes (such as powers of two or predefined bucket lengths) to reuse already compiled graphs.
+
 ---
 
 ## Tensors
 
-Tensors hold the inputs and outputs of a graph computation. They represent concrete multi-dimensional array values (from scalar 0D to arbitrary dimensions), defined by their **shape** (which specifies the dimensions and a data type, or `DType`).
+Tensors hold the inputs and outputs of a graph computation. They represent concrete multi-dimensional array values (including _scalar_ values), 
+defined by their **shape** (`shapes.Shape`), which specifies the axes' dimensions and a data type (`dtypes.DType`).
 
 ### Shapes and data types (dtypes)
 
 Every tensor has a shape (e.g. `(Float32)[2, 2]`), a list of dimension sizes, plus a `DType`. GoMLX checks shape compatibility at graph construction time, catching mismatches before any computation starts.
 
-You can construct [Tensor](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/tensor.go) objects from standard Go values (like multi-dimensional slices) using [FromValue](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/local.go#L799):
+You can construct [tensors.Tensor](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/tensor.go) objects from standard Go values (like multi-dimensional slices) using [FromValue](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/local.go#L799):
 
 <!-- sync_code: file=core-concepts/tensors/main.go tag=create -->
 ```go
@@ -222,11 +264,45 @@ Output:
 Batch images shape: (Float32)[2, 100, 100, 3]
 ```
 
+{{< callout type="info" >}}
+GoMLX uses the **NHWC** (`[batch_size, height, width, channels]`) layout for images by default. If you are porting models from frameworks like PyTorch that default to `NCHW` (`[batch_size, channels, height, width]`), you will need to transpose the axes (e.g. using `graph.Transpose` or configuring the layers accordingly).
+{{< /callout >}}
+
+---
+
+## Gradients & Automatic Differentiation
+
+A fundamental requirement for training neural networks is the ability to compute gradients. GoMLX performs automatic differentiation symbolically during the graph building phase. It automatically appends the mathematical operations required for back-propagation directly into the compiled graph.
+
+Use the `graph.Gradient(loss, targets...)` function to calculate the gradient of a scalar node (typically the model's loss) with respect to a list of target nodes:
+
+```go
+func gradFn(x, y *Node) (loss, gradX, gradY *Node) {
+    // f(x, y) = x^2 + xy
+    loss = Add(Square(x), Mul(x, y))
+    
+    // Reduce if inputs are not scalars, as Gradient requires a scalar loss
+    scalarLoss := ReduceAllSum(loss)
+    
+    // Calculate gradients df/dx and df/dy symbolically
+    grads := Gradient(scalarLoss, x, y)
+    return loss, grads[0], grads[1]
+}
+```
+
+{{< callout type="note" >}}
+GoMLX currently supports computing the gradient of a scalar value (loss). It does not compute full Jacobians or Hessians directly, though higher-order gradients can be constructed manually by differentiating gradient nodes.
+{{< /callout >}}
+
 ---
 
 ## The `model.Store` and Scopes
 
 To build trainable models, you need a way to declare, retrieve, and update parameters (weights and biases) that persist across graph executions. The [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) is a hierarchical (tree-like) store for model parameters (represented by [Variable](file:///home/janpf/Projects/gomlx/gomlx/ml/model/variable.go)) and hyperparameters.
+
+It is important to understand the division of responsibilities here:
+* **`model.Store`**: This is the actual stateful container that physically stores the variable values (tensors representing weights and biases) and hyperparameters of your model in memory. It persists across multiple JIT compilations and graph executions.
+* **`model.Scope`**: This is a lightweight pointer that represents a specific path or "current directory" within the hierarchical `Store` (e.g., `/layer1`). Layer functions accept a `*model.Scope` and construct or look up variables relative to their current scope, which prevents name collisions and organizes weights cleanly (e.g., `/layer1/weights`, `/layer2/weights`).
 
 ### Model Variables and Executors
 
@@ -403,18 +479,19 @@ Output:
 <!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000022 (moving average = 0.000028)
-Step  1999: MSE Loss = 0.000021 (moving average = 0.000016)
-Step  2999: MSE Loss = 0.000025 (moving average = 0.000017)
-Step  3999: MSE Loss = 0.000017 (moving average = 0.000017)
-Step  4999: MSE Loss = 0.000018 (moving average = 0.000017)
+Step   999: MSE Loss = 0.000039 (moving average = 0.000032)
+Step  1999: MSE Loss = 0.000026 (moving average = 0.000016)
+Step  2999: MSE Loss = 0.000022 (moving average = 0.000018)
+Step  3999: MSE Loss = 0.000009 (moving average = 0.000013)
+Step  4999: MSE Loss = 0.000025 (moving average = 0.000014)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```
 
-Each of these pieces — the backend, layers, store, loss, optimizer, and training loop — is independently replaceable:
+Each of these pieces — the backend, model, store, loss, optimizer, and training loop — is independently replaceable:
 - Swap out the Adam optimizer for `optimizers.StochasticGradientDescent()` or any other strategy.
 - Modify the neural network definition or layers without changing how the training loop or dataset works.
+- Load weights (store) from a different checkpoint, or create the average of the last 10 checkpoints.
 - Switch the backend from CUDA GPU to Metal/CPU without altering any machine learning code.
 
 That's what makes GoMLX powerful for research and experimentation.
