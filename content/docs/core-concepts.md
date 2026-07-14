@@ -479,11 +479,11 @@ Output:
 <!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000039 (moving average = 0.000032)
-Step  1999: MSE Loss = 0.000026 (moving average = 0.000016)
-Step  2999: MSE Loss = 0.000022 (moving average = 0.000018)
-Step  3999: MSE Loss = 0.000009 (moving average = 0.000013)
-Step  4999: MSE Loss = 0.000025 (moving average = 0.000014)
+Step   999: MSE Loss = 0.000035 (moving average = 0.000046)
+Step  1999: MSE Loss = 0.000035 (moving average = 0.000027)
+Step  2999: MSE Loss = 0.000023 (moving average = 0.000027)
+Step  3999: MSE Loss = 0.000015 (moving average = 0.000028)
+Step  4999: MSE Loss = 0.000033 (moving average = 0.000021)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```
