@@ -619,7 +619,7 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 			}
 
 			// Adjust the common leading indentation
-			snippetLines = trimTrailingEmptyLines(snippetLines)
+			snippetLines = trimEmptyLines(snippetLines)
 			adjustedSnippet := adjustIndentation(snippetLines)
 
 			fenceStart := "```go"
@@ -943,8 +943,13 @@ func parseOutputSnippets(output string) map[string][]string {
 	return snippets
 }
 
-// trimTrailingEmptyLines removes trailing empty/whitespace-only lines from a slice of string lines.
-func trimTrailingEmptyLines(lines []string) []string {
+// trimEmptyLines removes leading and trailing empty/whitespace-only lines from a slice of string lines.
+func trimEmptyLines(lines []string) []string {
+	// Trim leading empty lines
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	// Trim trailing empty lines
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
