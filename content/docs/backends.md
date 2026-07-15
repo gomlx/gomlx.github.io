@@ -125,6 +125,18 @@ our slack channel for questions.
 
 * **Pros**: Leverages Apple Silicon's Apple Neural Engine (ANE) and unified memory GPU (Metal) on Macs.
 
+
+---
+
+## Devices and `DeviceNum`
+
+A backend can be connected to multiple accelerator devices (for instance, a machine with multiple GPUs or a TPU pod). To address specific devices within a backend, GoMLX uses the `compute.DeviceNum` type (which is an integer wrapper).
+
+* **Single-Device Default**: If you are not using multiple accelerators, you can always simply default this device number to `0`.
+* **Addressing Devices**: For multi-device setups, device numbers range from `0` to `backend.NumDevices() - 1`. You specify this number when allocating buffers on specific devices (e.g., in `tensors.FromShapeForBackend`), performing distributed computations, or pinning executions.
+
+There is support for distributed execution, including distributed datasets and distributed training, see packages `compute/distributed`, `gomlx/core/tensors/dtensor` along with the standard packages to train models.
+
 ---
 
 ## Backend Compliance Testing
