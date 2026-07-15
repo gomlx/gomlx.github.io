@@ -91,7 +91,7 @@ func main() {
 		klog.V(1).Infof("Syncing code snippets for %s...", file)
 		changed, err := processMarkdownFile(file, mode, ref)
 		if err != nil {
-			klog.V(1).Infof("Error processing %s: %v", file, err)
+			klog.Errorf("Error processing %s: %v", file, err)
 			errorCount++
 		} else {
 			if changed {
@@ -222,7 +222,7 @@ func getFileContent(mode, value, filePath string) ([]byte, error) {
 
 // parseGoSnippets parses all snippets annotated with //md: or //md_start://md_end: blocks in a Go file.
 // It returns a map of tag -> lines, and a map of tag -> first line number (excluding imports).
-func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
+func parseGoSnippets(filePath string, goContent string) (map[string][]string, map[string]int, error) {
 	snippets := make(map[string][]string)
 	firstLineNums := make(map[string]int)
 	lines := strings.Split(goContent, "\n")
@@ -252,6 +252,9 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 					tags = append(tags, t)
 				}
 			}
+			if len(tags) == 0 {
+				return nil, nil, fmt.Errorf("%s:%d: //md_start has no tags specified", filePath, lineNum)
+			}
 			activeTagsStack = append(activeTagsStack, tags)
 			for _, t := range tags {
 				activeTagsMap[t]++
@@ -273,7 +276,7 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 					}
 				}
 			} else {
-				activeTagsMap = make(map[string]int)
+				return nil, nil, fmt.Errorf("%s:%d: unmatched //md_end: (no active md_start block)", filePath, lineNum)
 			}
 			continue
 		}
@@ -352,7 +355,15 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 		}
 	}
 
-	return snippets, firstLineNums
+	if len(activeTagsStack) > 0 {
+		var unclosedTags []string
+		for _, tags := range activeTagsStack {
+			unclosedTags = append(unclosedTags, tags...)
+		}
+		return nil, nil, fmt.Errorf("%s: unclosed //md_start block(s) for tags: %s", filePath, strings.Join(unclosedTags, ", "))
+	}
+
+	return snippets, firstLineNums, nil
 }
 
 // updateBraceDepth counts matching curly braces while ignoring string literals and comments.
@@ -542,7 +553,10 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to load Go file: %w", err)
 			}
-			lines, lineNums := parseGoSnippets(string(goContent))
+			lines, lineNums, err := parseGoSnippets(filePath, string(goContent))
+			if err != nil {
+				return nil, 0, err
+			}
 			snippets = GoSnippets{Lines: lines, FirstLineNum: lineNums}
 			fileSnippetsCache[filePath] = snippets
 		}
@@ -593,12 +607,12 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 			if isOutput {
 				snippetLines, err = getOutputSnippet(targetFile, targetTag)
 				if err != nil {
-					return false, fmt.Errorf("error resolving output snippet for %s (tag=%s): %w", targetFile, targetTag, err)
+					return false, fmt.Errorf("line %d: error resolving output snippet for %s (tag=%s): %w", i+1, targetFile, targetTag, err)
 				}
 			} else {
 				snippetLines, lineNum, err = getSnippet(targetFile, targetTag)
 				if err != nil {
-					return false, fmt.Errorf("error resolving code snippet for %s (tag=%s): %w", targetFile, targetTag, err)
+					return false, fmt.Errorf("line %d: error resolving code snippet for %s (tag=%s): %w", i+1, targetFile, targetTag, err)
 				}
 				linkURL := getSourceLinkURL(mode, value, targetFile, lineNum)
 				linkLine = fmt.Sprintf(`<div align="right"><small><a href="%s">(See source)</a></small></div>`, linkURL)
