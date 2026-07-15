@@ -233,10 +233,32 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 	var activeTagsStack [][]string
 	activeTagsMap := make(map[string]int) // tracks counts of active tags to handle nested active tags cleanly
 
-	var braceDepth int
-	var inMultiLineComment, inString, inBacktick bool
-	var inFunc bool
+	var inMultiLineComment bool
 	var inImportBlock bool
+
+	// To track the current block of lines for each tag:
+	currentBlocks := make(map[string][]string)
+
+	// A helper to flush a block for tag t:
+	flushBlock := func(t string) {
+		block := currentBlocks[t]
+		if len(block) == 0 {
+			return
+		}
+		// Trim leading/trailing empty lines of this block
+		block = trimEmptyLines(block)
+		if len(block) == 0 {
+			currentBlocks[t] = nil
+			return
+		}
+		// Adjust indentation of this block
+		adjusted := adjustIndentation(block)
+		if len(snippets[t]) > 0 {
+			snippets[t] = append(snippets[t], "")
+		}
+		snippets[t] = append(snippets[t], adjusted...)
+		currentBlocks[t] = nil
+	}
 
 	for i, line := range lines {
 		lineNum := i + 1
@@ -312,28 +334,12 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 		}
 
 		// Check if it's a comment or empty line
-		isCommentOrEmpty := false
-		if inMultiLineComment || cleanLine == "" || strings.HasPrefix(cleanLine, "//") || strings.HasPrefix(cleanLine, "/*") {
-			isCommentOrEmpty = true
+		if strings.HasPrefix(cleanLine, "/*") {
+			inMultiLineComment = true
 		}
-
-		// Check if a function is starting at package level
-		if braceDepth == 0 && strings.HasPrefix(cleanLine, "func ") {
-			inFunc = true
-		}
-
-		// Update brace depth based on the processed line
-		braceDepth = updateBraceDepth(processedLine, braceDepth, &inMultiLineComment, &inString, &inBacktick)
-
-		// If we are inside a function block, strip the first level of indentation
-		if inFunc {
-			processedLine = stripOneLevelOfIndentation(processedLine)
-		}
-
-		// If brace depth returns to 0 (or less), we are no longer inside a function
-		if braceDepth <= 0 {
-			inFunc = false
-			braceDepth = 0
+		isCommentOrEmpty := inMultiLineComment || cleanLine == "" || strings.HasPrefix(cleanLine, "//")
+		if strings.HasSuffix(cleanLine, "*/") {
+			inMultiLineComment = false
 		}
 
 		// Gather all unique tags for this line
@@ -345,14 +351,26 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 			lineTags[t] = true
 		}
 
+		// Flush tags that are no longer active on this line
+		for t := range currentBlocks {
+			if !lineTags[t] {
+				flushBlock(t)
+			}
+		}
+
 		// Save the processed line to all active and trailing tags
 		for t := range lineTags {
-			snippets[t] = append(snippets[t], processedLine)
+			currentBlocks[t] = append(currentBlocks[t], processedLine)
 			// Track the first line number for this tag (excluding import and comment/empty lines)
 			if !isImport && !isCommentOrEmpty && firstLineNums[t] == 0 {
 				firstLineNums[t] = lineNum
 			}
 		}
+	}
+
+	// Flush any remaining active blocks in currentBlocks
+	for t := range currentBlocks {
+		flushBlock(t)
 	}
 
 	if len(activeTagsStack) > 0 {
@@ -366,130 +384,36 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 	return snippets, firstLineNums, nil
 }
 
-// updateBraceDepth counts matching curly braces while ignoring string literals and comments.
-func updateBraceDepth(line string, currentDepth int, inMultiLineComment, inString, inBacktick *bool) int {
-	depth := currentDepth
-	i := 0
-	for i < len(line) {
-		if *inMultiLineComment {
-			if i+1 < len(line) && line[i] == '*' && line[i+1] == '/' {
-				*inMultiLineComment = false
-				i += 2
-			} else {
-				i++
-			}
-			continue
-		}
-
-		if *inString {
-			if line[i] == '\\' {
-				i += 2 // skip escaped character
-			} else if line[i] == '"' {
-				*inString = false
-				i++
-			} else {
-				i++
-			}
-			continue
-		}
-
-		if *inBacktick {
-			if line[i] == '`' {
-				*inBacktick = false
-				i++
-			} else {
-				i++
-			}
-			continue
-		}
-
-		if i+1 < len(line) && line[i] == '/' && line[i+1] == '/' {
-			break // comment starts, rest of the line is ignored
-		}
-		if i+1 < len(line) && line[i] == '/' && line[i+1] == '*' {
-			*inMultiLineComment = true
-			i += 2
-			continue
-		}
-
-		if line[i] == '"' {
-			*inString = true
-			i++
-			continue
-		}
-		if line[i] == '`' {
-			*inBacktick = true
-			i++
-			continue
-		}
-
-		if line[i] == '{' {
-			depth++
-		} else if line[i] == '}' {
-			depth--
-		}
-		i++
-	}
-	return depth
-}
-
-// stripOneLevelOfIndentation strips one leading tab or four leading spaces from a line.
-func stripOneLevelOfIndentation(line string) string {
-	if strings.HasPrefix(line, "\t") {
-		return strings.TrimPrefix(line, "\t")
-	}
-	if strings.HasPrefix(line, "    ") {
-		return strings.TrimPrefix(line, "    ")
-	}
-	return line
-}
-
-// adjustIndentation dedents a list of lines so that the minimum common indentation is removed.
+// adjustIndentation dedents a list of lines according to the rule:
+// - minTabs := minimum number of prefixing tabs of all non-empty lines.
+// - Remove minTabs tabs from the start of every line.
 func adjustIndentation(lines []string) []string {
 	if len(lines) == 0 {
 		return lines
 	}
 
-	var commonPrefix *string
+	minTabs := -1
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
-		// Identify leading whitespace
-		var idx int
-		for idx < len(line) && (line[idx] == ' ' || line[idx] == '\t') {
-			idx++
+		// Count leading tabs
+		tabs := 0
+		for tabs < len(line) && line[tabs] == '\t' {
+			tabs++
 		}
-		leading := line[:idx]
 
-		if commonPrefix == nil {
-			p := leading
-			commonPrefix = &p
-		} else {
-			common := *commonPrefix
-			limit := len(common)
-			if len(leading) < limit {
-				limit = len(leading)
-			}
-			matchLen := 0
-			for i := 0; i < limit; i++ {
-				if common[i] == leading[i] {
-					matchLen++
-				} else {
-					break
-				}
-			}
-			p := common[:matchLen]
-			commonPrefix = &p
+		if minTabs == -1 || tabs < minTabs {
+			minTabs = tabs
 		}
 	}
 
-	if commonPrefix == nil || *commonPrefix == "" {
+	if minTabs <= 0 {
 		return lines
 	}
 
-	prefix := *commonPrefix
+	prefix := strings.Repeat("\t", minTabs)
 	result := make([]string, len(lines))
 	for i, line := range lines {
 		if strings.HasPrefix(line, prefix) {

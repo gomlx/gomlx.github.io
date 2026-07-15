@@ -40,9 +40,9 @@ Example:
 
 <!-- sync_code: file=computation-graph/main.go tag=distance_fn -->
 ```go
-
+// EuclideanDistance between two values.
 func EuclideanDistance(a, b *Node) *Node {
-return Sqrt(ReduceAllSum(Square(Sub(a, b))))
+	return Sqrt(ReduceAllSum(Square(Sub(a, b))))
 }
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/computation-graph/main.go#L14">(See source)</a></small></div>
@@ -107,14 +107,17 @@ You call the executor by passing either concrete `*tensors.Tensor` objects or st
 ```go
 import (
 	"fmt"
+
 	"github.com/gomlx/compute"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
 )
 
+// EuclideanDistance between two values.
 func EuclideanDistance(a, b *Node) *Node {
-return Sqrt(ReduceAllSum(Square(Sub(a, b))))
+	return Sqrt(ReduceAllSum(Square(Sub(a, b))))
 }
+
 // 1. Create the executor (that expects 1 output)
 exec, err := NewExec1(backend, EuclideanDistance)
 if err != nil {

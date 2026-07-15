@@ -49,8 +49,10 @@ computations. Create one at program startup and reuse it everywhere:
 <!-- sync_code: file=core-concepts/graph/main.go tag=cell1 -->
 ```go
 import (
-	"github.com/gomlx/compute"
-	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
+
+"github.com/gomlx/compute"
+_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
+
 )
 
 backend := compute.MustNew() // auto-selects best available backend
@@ -95,6 +97,7 @@ The computation graphs are then JIT-compiled and can be executed very efficientl
 <!-- sync_code: file=core-concepts/graph/main.go tag=cell2 -->
 ```go
 import (
+
 	. "github.com/gomlx/gomlx/core/graph"
 )
 
@@ -144,6 +147,7 @@ an error.
 _, err := addExec.Call(int32(1), float32(1.0))
 if err != nil {
 	//...
+
 }
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L39">(See source)</a></small></div>
@@ -347,16 +351,16 @@ Here is an example of defining a custom `denseLayer` function and applying it to
 <!-- sync_code: file=core-concepts/store/main.go tag=scopes -->
 ```go
 func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
-g := x.Graph()
-dtype := x.DType()
-inputDims := x.Shape().Dimensions[1] // x shape is [batch, inputDims]
+	g := x.Graph()
+	dtype := x.DType()
+	inputDims := x.Shape().Dimensions[1] // x shape is [batch, inputDims]
 
-// Create weights and biases in the current scope
-weights := scope.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
-biases := scope.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
+	// Create weights and biases in the current scope
+	weights := scope.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
+	biases := scope.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
 
-// Compute x * weights + biases
-return Add(Dot(x, weights).Product(), biases)
+	// Compute x * weights + biases
+	return Add(Dot(x, weights).Product(), biases)
 }
 
 modelFn := func(scope *model.Scope, x *Node) *Node {
@@ -479,11 +483,11 @@ Output:
 <!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000035 (moving average = 0.000046)
-Step  1999: MSE Loss = 0.000035 (moving average = 0.000027)
-Step  2999: MSE Loss = 0.000023 (moving average = 0.000027)
-Step  3999: MSE Loss = 0.000015 (moving average = 0.000028)
-Step  4999: MSE Loss = 0.000033 (moving average = 0.000021)
+Step   999: MSE Loss = 0.000020 (moving average = 0.000025)
+Step  1999: MSE Loss = 0.000018 (moving average = 0.000017)
+Step  2999: MSE Loss = 0.000019 (moving average = 0.000015)
+Step  3999: MSE Loss = 0.000014 (moving average = 0.000015)
+Step  4999: MSE Loss = 0.000009 (moving average = 0.000013)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```
