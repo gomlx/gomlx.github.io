@@ -59,11 +59,8 @@ func main() {
 		klog.Fatalf("Failed to update hugo.toml: %v", err)
 	}
 
-	klog.V(1).Infof("Fetching file list (mode: %s, ref/path: %s)...", mode, ref)
-	files, err := getDocsFiles(mode, ref)
-	if err != nil {
-		klog.Fatalf("Failed to get file list: %v", err)
-	}
+	// Only synchronize CHANGELOG.md (which generates changelog.md)
+	files := []string{"CHANGELOG.md"}
 
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		klog.Fatalf("Failed to create output dir: %v", err)
@@ -95,31 +92,11 @@ func main() {
 		weight += 10
 	}
 
-	klog.V(1).Info("Fetching and processing overview (README.md)...")
-	readmeContent, err := getFileContent(mode, ref, "README.md")
-	if err != nil {
-		klog.Fatalf("Failed to read README.md: %v", err)
-	}
-
-	readmeSource := getSourceURL(mode, ref, "README.md")
-	changed, err := processOverview(string(readmeContent), readmeSource, outDir)
-	if err != nil {
-		klog.Fatalf("Failed to process overview: %v", err)
-	}
-	if changed {
-		relPath, err := filepath.Rel(baseDir, filepath.Join(outDir, "overview.md"))
-		if err != nil {
-			relPath = filepath.Join(outDir, "overview.md")
-		}
-		fmt.Printf("✅ Updated %s\n", relPath)
-		changedCount++
-	}
-
 	if changedCount == 0 {
 		fmt.Println("✅  No updates found.")
 	}
 
-	klog.V(1).Infof("Sync complete. %d doc files written to %s", len(files)+1, outDir)
+	klog.V(1).Infof("Sync complete. %d doc files written to %s", len(files), outDir)
 }
 
 // --- Helpers: Configuration & State ---
