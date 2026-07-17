@@ -20,33 +20,37 @@ In idiomatic Go, checking `if err != nil` at every step is the standard. However
 
 ### Comparison: Euclidean Distance Formula
 
-Consider the standard Euclidean distance formula: $d = \sqrt{\sum (x - y)^2}$
+Consider the simple Euclidean distance formula: $d = \sqrt{\sum (x - y)^2}$
 
 **Without exceptions (standard Go):**
 ```go
-// Every math operation (Sub, Square, Reduce, Sqrt) could fail due to shape/type mismatch.
-diff, err := Sub(x, y)
-if err != nil {
-    return nil, err
-}
-squared, err := Square(diff)
-if err != nil {
-    return nil, err
-}
-sum, err := ReduceAllSum(squared)
-if err != nil {
-    return nil, err
-}
-distance, err := Sqrt(sum)
-if err != nil {
-    return nil, err
+func EuclideanDistance(x, y *Node) (*Node, error) {
+    // Every math operation (Sub, Square, Reduce, Sqrt) could fail due to shape/type mismatch.
+    diff, err := Sub(x, y)
+    if err != nil {
+        return nil, err
+    }
+    squared, err := Square(diff)
+    if err != nil {
+        return nil, err
+    }
+    sum, err := ReduceAllSum(squared)
+    if err != nil {
+        return nil, err
+    }
+    distance, err := Sqrt(sum)
+    if err != nil {
+        return nil, err
+    }
+    return distance, nil
 }
 ```
 
 **With exceptions (GoMLX):**
 ```go
-l2 := ReduceAllSum(Square(Sub(x, y)))
-distance := Sqrt(l2)
+func EuclideanDistance(x, y *Node) *Node {
+    return Sqrt(ReduceAllSum(Square(Sub(x, y))))
+}
 ```
 
 The exception-based builder is clean, readable, and directly mirrors the mathematical definition of Euclidean distance.
@@ -61,7 +65,7 @@ While panics are generally discouraged in most Go applications, model graph buil
 * **Sequential Setup**: Graph construction is sequential (no goroutines). There are no race conditions or background goroutines left in unstable states during a panic.
 * **No Performance Impact**: Graph building is done only once when initializing/warming-up the model. The graph is then JIT-compiled. During the training loop execution, no panics are used.
 * **Panics Are Handled**: The executors (`graph.Exec` and `model.Exec`) capture the panics and handle them cleanly.
-  So in most use cases, the one doen't need to handle them.
+  So in most use cases, one doesn't need to handle them, and they only see the error.
 
 ---
 
