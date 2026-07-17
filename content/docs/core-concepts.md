@@ -55,9 +55,9 @@ _ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
 
 )
 
-backend := compute.MustNew() // auto-selects best available backend
+backend, err := compute.New() // auto-selects best available backend
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L19">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L20">(See source)</a></small></div>
 
 Output:
 
@@ -105,11 +105,18 @@ addFn := func(a, b *Node) *Node {
 	fmt.Printf("* building addFn computation graph: a.shape=%s, b.shape=%s\n", a.Shape(), b.Shape())
 	return Add(a, b)
 }
-addExec := MustNewExec1(backend, addFn)
-fmt.Printf("\t- 1+1=%s\n", addExec.MustCall(1.0, 1.0))
+addExec, err := NewExec1(backend, addFn)
+if err != nil {
+	log.Fatalf("error creating computation graph: %+v\n", err)
+}
+v1, err := addExec.Call(1.0, 1.0)
+if err != nil {
+	log.Fatalf("Failed to compile/execute: %+v", err)
+}
+fmt.Printf("\t- 1+1=%s\n", v1)
 fmt.Printf("\t- 2+2=%s\n", addExec.MustCall(2.0, 2.0))
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L27">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L31">(See source)</a></small></div>
 
 Output:
 
@@ -122,8 +129,9 @@ Output:
 
 {{< callout type="note" >}}
 - The `addFn` was called only once to build the graph -- hence the message "* building addFn" was only printed once. 
-  After the graph was built and compiled, it was simply executed twice with `addExec.MustCall()`. 
-- We _dot imported_ the package `. "github.com/gomlx/gomlx/core/graph"`. This is common practice when most of the file contents are graph building blocks. 
+  After the graph was built and compiled, it was simply executed twice with `addExec.Call()` and `addExec.MustCall()`. 
+- We _dot imported_ the package `. "github.com/gomlx/gomlx/core/graph"`. This is common practice when most of the
+  file contents are graph building blocks. 
 {{< /callout >}}
 
 
@@ -144,13 +152,13 @@ an error.
 
 <!-- sync_code: file=core-concepts/graph/main.go tag=cell3 -->
 ```go
-_, err := addExec.Call(int32(1), float32(1.0))
+_, err = addExec.Call(int32(1), float32(1.0))
 if err != nil {
 	//...
 
 }
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L39">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L50">(See source)</a></small></div>
 
 Output:
 
@@ -158,8 +166,8 @@ Output:
 ```
 * building addFn computation graph: a.shape=(Int32), b.shape=(Float32)
 Error: cannot broadcast Int32 and Float32 for "Add": they have different dtypes
-	.../gomlx.github.io/core-concepts/graph/main.go:29
-	.../gomlx.github.io/core-concepts/graph/main.go:39
+	.../gomlx.github.io/core-concepts/graph/main.go:33
+	.../gomlx.github.io/core-concepts/graph/main.go:50
 ```
 
 ### Exception-based Error Handling during Graph Building
@@ -167,7 +175,10 @@ Error: cannot broadcast Int32 and Float32 for "Add": they have different dtypes
 Unlike standard Go code where errors are returned as values, GoMLX graph building functions panic (throw exceptions) when shape or type mismatches are found.
 
 * **Why?** Writing long mathematical formulas would be cluttered and difficult to read if every operation returned an error.
-* **How it works:** Panics only occur during the graph construction phase. The `Exec` wrapper catches these panics automatically and returns them as standard Go errors (complete with stack traces) when `.Call()` is invoked.
+* **How it works:** Panics only occur during the graph construction phase. 
+  The `Exec` wrapper catches these panics automatically and returns them as standard Go errors (complete with stack traces) when `.Call()` is invoked.
+
+See more in [Error Handling](/docs/advanced-usage/error-handling).
 
 ### Static Shapes & Recompilation Performance Trap
 
@@ -483,11 +494,11 @@ Output:
 <!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000020 (moving average = 0.000025)
-Step  1999: MSE Loss = 0.000018 (moving average = 0.000017)
-Step  2999: MSE Loss = 0.000019 (moving average = 0.000015)
-Step  3999: MSE Loss = 0.000014 (moving average = 0.000015)
-Step  4999: MSE Loss = 0.000009 (moving average = 0.000013)
+Step   999: MSE Loss = 0.000031 (moving average = 0.000039)
+Step  1999: MSE Loss = 0.000021 (moving average = 0.000026)
+Step  2999: MSE Loss = 0.000023 (moving average = 0.000026)
+Step  3999: MSE Loss = 0.000033 (moving average = 0.000024)
+Step  4999: MSE Loss = 0.000014 (moving average = 0.000018)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```
