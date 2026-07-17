@@ -145,7 +145,7 @@ Distance: float64(5)
 A `graph.Exec` is completely **stateless**. Every execution computes the output strictly from the arguments passed to `.Call()`. The graph does not store weights or persist mutable variables between calls.
 
 {{< callout type="info" >}}
-**Executing Stateful Models**: If you need execution state (such as neural network weights that persist and are updated across training iterations), use `model.Exec` instead. It wraps the core `graph.Exec` and automatically passes variables from a `model.Store` as side-inputs and side-outputs. See [Model Store and Scope](/docs/model-store/) to learn more.
+**Executing Stateful Models**: If you need execution state (such as neural network weights that persist and are updated across training iterations), use `model.Exec` instead. It wraps the core `graph.Exec` and automatically passes variables from a `model.Store` as side-inputs and side-outputs. See [Variables & Checkpointing](/docs/variables-and-checkpoints/) to learn more.
 {{< /callout >}}
 
 ---
@@ -168,7 +168,7 @@ gradWeight, gradBias := grads[0], grads[1]
 ## The Stateless `ml/nn` Package
 
 When implementing neural networks, GoMLX offers two directories:
-1. `ml/layers`: High-level stateful modules that manage variables automatically using a `model.Scope` (see [Model Store And Scope](/docs/model-store/))
+1. `ml/layers`: High-level stateful modules that manage variables automatically using a `model.Scope` (see [Variables & Checkpointing](/docs/variables-and-checkpoints/))
 2. `ml/nn` (Neural Network Operators): A **stateless** library of neural network primitives.
 
 ### The Role of `ml/nn`
