@@ -12,6 +12,11 @@ enableRobotsTXT = true
     guessSyntax = true
   [markup.goldmark.renderer]
     unsafe = true
+  [markup.goldmark.extensions.passthrough]
+    enable = true
+    [markup.goldmark.extensions.passthrough.delimiters]
+      block = [["$$", "$$"], ["\\[", "\\]"]]
+      inline = [["$", "$"], ["\\(", "\\)"]]
 
 [params]
   description = "An easy-to-use ML and math framework for Go. No Python. Like PyTorch, Jax, or TensorFlow for Go."
