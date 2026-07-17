@@ -1,9 +1,9 @@
 - title: Get Started
   pages:
-    - name: Installation
-      url: docs/installation/
     - name: Overview
       url: docs/overview/
+    - name: Installation
+      url: docs/installation/
     - name: Core Concepts
       url: docs/core-concepts/
 
