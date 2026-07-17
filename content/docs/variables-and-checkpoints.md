@@ -1,12 +1,14 @@
 ---
-title: "Model Store and Scope"
+title: "Variables, Hyperparameters & Checkpointing"
 lead: "Manage model variables, hierarchical scopes, hyperparameters, and checkpoint saving."
 weight: 40
 ---
 
 ## Overview
 
-Computation graphs in GoMLX are functional and stateless. To build trainable neural networks, we need a mechanism to declare, retrieve, and update parameters (such as weights and biases) that persist across graph executions. GoMLX provides this functionality through the `github.com/gomlx/gomlx/ml/model` package using two core concepts: **Store** and **Scope**.
+Computation graphs in GoMLX are functional and stateless. To build trainable neural networks, we need a mechanism to declare, retrieve, and update parameters (such as weights and biases) and hyperparameters that persist across graph executions. 
+
+GoMLX implements this state management through the `github.com/gomlx/gomlx/ml/model` package, utilizing **`model.Store`** and **`model.Scope`** to organize and manage variables and hyperparameters in a hierarchical arrangement.
 
 ---
 
@@ -36,21 +38,6 @@ graph LR
     end
 
     Ptr ---> Leaf3
-```
-
-```mermaid
-flowchart LR
-
-    subgraph Subgraph 2
-        direction TD 
-        B
-    end
-
-    subgraph Subgraph 1 
-        A
-    end
-
-    A-->B
 ```
 
 1. **`model.Store`**: This is the actual container registry that holds all the stateful variables (`model.Variable` tensors containing weights/biases) and hyperparameters of your model in memory. The `Store` persists across multiple compile/run cycles and is the object saved to disk during checkpointing.
@@ -103,6 +90,8 @@ counterVar := scope.VariableWithValue("counter", int32(0))
 ## Hyperparameters
 
 In addition to stateful variables, a `model.Scope` also carries hyperparameters (configuration parameters). They are organized hierarchically, allowing children scopes to inherit parameters from parent scopes unless overridden.
+
+See the dedicated [Hyperparameters](/docs/hyperparameters/) page for details on how this hierarchical parameter management can be used to simplify managing hyperparameters across complex networks and training sweeps.
 
 ### Setting Hyperparameters
 ```go

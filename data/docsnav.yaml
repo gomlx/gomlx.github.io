@@ -15,8 +15,8 @@
       url: docs/backends/
     - name: Tensor
       url: docs/tensors/
-    - name: Model Store and Scope
-      url: docs/model-store/
+    - name: Variables & Checkpointing
+      url: docs/variables-and-checkpoints/
 
 - title: Training & Layers
   pages:
