@@ -4,8 +4,8 @@
       url: docs/overview/
     - name: Installation
       url: docs/installation/
-    - name: Core Concepts
-      url: docs/core-concepts/
+    - name: Get Started
+      url: docs/get-started/
 
 - title: Core Guides
   pages:

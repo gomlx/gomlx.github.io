@@ -1,5 +1,5 @@
 ---
-title: "Core Concepts"
+title: "Get Started"
 lead: "Understand the main building blocks of every GoMLX program: backends, computation graphs, tensors and stores."
 weight: 3
 ---
@@ -44,20 +44,19 @@ graph TD
 ## Backend
 
 The `compute.Backend` connects your Go process to a hardware+software backend abstraction capable of executing our 
-computations. Create one at program startup and reuse it everywhere:
+computations. Create one at program startup and reuse it everywhere :
 
 <!-- sync_code: file=core-concepts/graph/main.go tag=cell1 -->
 ```go
 import (
-
 "github.com/gomlx/compute"
 _ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
-
 )
 
 backend, err := compute.New() // auto-selects best available backend
+fmt.Printf("Backend: %s\n", backend.Description())
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L20">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L13">(See source)</a></small></div>
 
 Output:
 
@@ -97,7 +96,6 @@ The computation graphs are then JIT-compiled and can be executed very efficientl
 <!-- sync_code: file=core-concepts/graph/main.go tag=cell2 -->
 ```go
 import (
-
 	. "github.com/gomlx/gomlx/core/graph"
 )
 
@@ -116,7 +114,7 @@ if err != nil {
 fmt.Printf("\t- 1+1=%s\n", v1)
 fmt.Printf("\t- 2+2=%s\n", addExec.MustCall(2.0, 2.0))
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L31">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L13">(See source)</a></small></div>
 
 Output:
 
@@ -155,7 +153,6 @@ an error.
 _, err = addExec.Call(int32(1), float32(1.0))
 if err != nil {
 	//...
-
 }
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/graph/main.go#L50">(See source)</a></small></div>
@@ -373,7 +370,6 @@ func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
 	// Compute x * weights + biases
 	return Add(Dot(x, weights).Product(), biases)
 }
-
 modelFn := func(scope *model.Scope, x *Node) *Node {
 	// Use scope.In to partition variable names under sub-scopes:
 	h := denseLayer(scope.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
@@ -494,11 +490,11 @@ Output:
 <!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000031 (moving average = 0.000039)
-Step  1999: MSE Loss = 0.000021 (moving average = 0.000026)
-Step  2999: MSE Loss = 0.000023 (moving average = 0.000026)
-Step  3999: MSE Loss = 0.000033 (moving average = 0.000024)
-Step  4999: MSE Loss = 0.000014 (moving average = 0.000018)
+Step   999: MSE Loss = 0.000026 (moving average = 0.000032)
+Step  1999: MSE Loss = 0.000038 (moving average = 0.000023)
+Step  2999: MSE Loss = 0.000013 (moving average = 0.000028)
+Step  3999: MSE Loss = 0.000017 (moving average = 0.000023)
+Step  4999: MSE Loss = 0.000025 (moving average = 0.000015)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```

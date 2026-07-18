@@ -28,11 +28,11 @@ enableRobotsTXT = true
 [menu]
   [[menu.main]]
     name = "Get Started"
-    url = "/docs/installation/"
+    url = "/docs/get-started/"
     weight = 1
   [[menu.main]]
     name = "Docs"
-    url = "/docs/"
+    url = "/docs/overview/"
     weight = 2
   [[menu.main]]
     name = "Examples"
