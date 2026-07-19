@@ -134,6 +134,8 @@ exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Nod
 
 ## Checkpointing (Saving and Loading)
 
+<img align="right" src="/img/gopher_checkpointing.jpeg" alt="GoMLX Gopher" width="220px"/>
+
 Model checkpoints allow you to persist training progress, recover from failures, or load pre-trained weights for inference. GoMLX manages checkpoints using the `checkpoint.Handler` struct. You configure and instantiate it using a builder pattern starting with `checkpoint.Build(store)`. Beyond model weights and variables, the checkpoint directory is also automatically used to save training metrics (such as losses, learning rates, and evaluation scores) as the training loop progresses, keeping a historical record of your run.
 
 ### 1. Configure the Storage Location
