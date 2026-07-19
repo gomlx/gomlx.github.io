@@ -115,20 +115,20 @@ import (
 func EuclideanDistance(a, b *Node) *Node {
 	return Sqrt(ReduceAllSum(Square(Sub(a, b))))
 }
-// 1. Create the executor (that expects 1 output)
-exec, err := NewExec1(backend, EuclideanDistance)
-if err != nil {
-	panic(err)
-}
+	// 1. Create the executor (that expects 1 output)
+	exec, err := NewExec1(backend, EuclideanDistance)
+	if err != nil {
+		panic(err)
+	}
 
-// 2. Call the executor with inputs (automatically JIT-compiled for Float64[] slices)
-resultTensor, err := exec.Call([]float64{1.0, 2.0}, []float64{4.0, 6.0})
-if err != nil {
-	panic(err)
-}
+	// 2. Call the executor with inputs (automatically JIT-compiled for Float64[] slices)
+	resultTensor, err := exec.Call([]float64{1.0, 2.0}, []float64{4.0, 6.0})
+	if err != nil {
+		panic(err)
+	}
 
-// 3. Print the result: float64(5)
-fmt.Printf("Distance: %s\n", resultTensor)
+	// 3. Print the result: float64(5)
+	fmt.Printf("Distance: %s\n", resultTensor)
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/computation-graph/main.go#L14">(See source)</a></small></div>
 
