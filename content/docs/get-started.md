@@ -8,36 +8,87 @@ weight: 3
 
 GoMLX is built on a few abstractions. Understanding them makes every other part of the library click:
 
-1. **Backend** — the connection to a hardware backend (CPU, GPU, TPU).
-2. **Graph** — a computation graph that you define as a pure Go function.
+1. **Backend** — the connection to a hardware backend (CPU, GPU, TPU). It JIT-compiles computation graphs (slow) and
+   executes them efficiently (fast) -- all done for you automatically.
+2. **Graph** — a computation graph that you build using a pure Go function.
 3. **Tensor** — a concrete multi-dimensional array (or scalar) value, used as input and output when executing graphs. 
-4. **Store** — a scoped storage for named and typed model parameters (weights), as well as hyperparameters of a model.
+4. **Store** — a scoped storage for named and typed model variables (aka. parameters or weights), as well as hyperparameters of a model.
 
 You can use just the backend and graph for mathematical computing, or add a `Store` to build trainable models.
 
 ### Conceptual Workflow
 
-Below is a visualization of how these core components interact when building, JIT-compiling, and running computations in GoMLX:
+Let's look at a minimal GoMLX program (stripped of error handling) that calculates the Euclidean distance between 2 tensors:
+
+<!-- sync_code: file=core-concepts/overview/main.go tag=simple -->
+```go
+func MyComputation(x, y *Node) *Node {
+	return Sqrt(ReduceAllSum(Square(Sub(x, y))))
+}
+
+backend, err := compute.New()
+exec, err := NewExec(backend, MyComputation)
+results, err := exec.Call([]float32{1.0, 2.0}, []float32{4.0, 6.0})
+fmt.Printf("Distance (1,2)->(4,6):  %v\n", results[0])
+results, err = exec.Call([]float32{0, 0}, []float32{5, 12})
+fmt.Printf("Distance (0,0)->(5,12): %v\n", results[0])
+```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/overview/main.go#L13">(See source)</a></small></div>
+
+The output is:
+
+<!-- sync_code: file=core-concepts/overview/main.go output_tag=simple -->
+```
+Distance (1,2)->(4,6):  float32(5)
+Distance (0,0)->(5,12): float32(13)
+```
+
+Behind the scenes, this is what is happening:
 
 ```mermaid
-graph TD
-    subgraph Host ["Host CPU"]
-        GoCode["Go Code"]
-        Store["model.Store\n(Variables & Hyperparams)"]
-        GoCode -->|1. Build Graph| Graph["Symbolic Graph\n(graph.Graph and graph.Node)"]
-        GoCode -->|Create & Use Variables| Store
-        Graph -->|2. Compile| Exec["Executor\n(model.Exec)"]
-    end
+sequenceDiagram
+    autonumber
+    
+    participant Go as Orchestrator<br/>(Go, user code)
+    participant Graph as Graph Builder<br/>(Go, symbolic computation)
+    participant Backend as Backend<br/>(e.g.: XLA/PJRT)
 
-    subgraph BackendJIT ["Backend (GPU, CPU, TPU, etc.)"]
-		Backend["compute.Backend"]
-        Exec -->|"JIT-Compile\n(once per shape)"| Backend
-		Executable["Executable"]
-		Backend -->|Returns| Executable
-        Exec -->|"3. Call(Inputs...)"| Executable
-        Store <--> |"Auto Sync Variables\n(In/Out)"| Executable
-    end
+    Go->>Backend: backend := compute.New()
+    Go->>Go: exec := graph.NewExec(backend, MyComputation)
+
+    Note over Go, Backend: Step 3: First execution (triggers build & compile)
+    Go->>Graph: exec.Call(inputs)
+    
+    activate Graph
+    Note right of Graph: Invoke "MyComputation" to build symbolic computation<br/>Uses ops like Sub, Square, ReduceSum, Sqrt
+    Graph-->>Backend: Passes symbolic graph
+    deactivate Graph
+    
+    activate Backend
+    Backend->>Backend: Graph.Compile() -> Executable
+    Backend->>Backend: Executable.Execute(inputs)
+    Backend-->>Go: Returns output tensors
+    deactivate Backend
+
+    Note over Go, Backend: Step 4: Second execution with the SAME shape
+    Go->>Backend: exec.Call(inputs)
+    
+    activate Backend
+    Note right of Backend: Graph building & compile skipped!<br/>Uses cached Executable
+    Backend->>Backend: Executable.Execute(inputs)
+    Backend-->>Go: Returns output tensors
+    deactivate Backend
 ```
+
+{{< callout type="note" >}}
+- This is a 'stateless' computation—because there are no trainable variables or model parameters, we don't need a `Store` object.
+- The Go float slices are automatically converted to `Tensor` objects, which is what the backend operates on.
+{{< /callout >}}
+
+This is the heart of GoMLX. We used a very simple example, but it demonstrates how to efficiently execute math on large tensors in Go.
+
+Below we'll progressively unpack GoMLX concepts and expand its applicability all the way to training machine 
+learning (ML) models.
 
 ---
 
@@ -49,8 +100,8 @@ computations. Create one at program startup and reuse it everywhere :
 <!-- sync_code: file=core-concepts/graph/main.go tag=cell1 -->
 ```go
 import (
-"github.com/gomlx/compute"
-_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
+	"github.com/gomlx/compute"
+	_ "github.com/gomlx/gomlx/backends/default" // Includes default backends.
 )
 
 backend, err := compute.New() // auto-selects best available backend
@@ -372,12 +423,12 @@ func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
 	// Compute x * weights + biases
 	return Add(Dot(x, weights).Product(), biases)
 }
-modelFn := func(scope *model.Scope, x *Node) *Node {
-	// Use scope.In to partition variable names under sub-scopes:
-	h := denseLayer(scope.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
-	y := denseLayer(scope.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
-	return y
-}
+	modelFn := func(scope *model.Scope, x *Node) *Node {
+		// Use scope.In to partition variable names under sub-scopes:
+		h := denseLayer(scope.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
+		y := denseLayer(scope.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
+		return y
+	}
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/store/main.go#L17">(See source)</a></small></div>
 
@@ -492,11 +543,11 @@ Output:
 <!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000027 (moving average = 0.000034)
-Step  1999: MSE Loss = 0.000047 (moving average = 0.000025)
-Step  2999: MSE Loss = 0.000010 (moving average = 0.000017)
-Step  3999: MSE Loss = 0.000008 (moving average = 0.000022)
-Step  4999: MSE Loss = 0.000011 (moving average = 0.000019)
+Step   999: MSE Loss = 0.000035 (moving average = 0.000037)
+Step  1999: MSE Loss = 0.000025 (moving average = 0.000020)
+Step  2999: MSE Loss = 0.000019 (moving average = 0.000026)
+Step  3999: MSE Loss = 0.000012 (moving average = 0.000019)
+Step  4999: MSE Loss = 0.000011 (moving average = 0.000024)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```
