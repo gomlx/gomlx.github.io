@@ -288,19 +288,21 @@ A fundamental requirement for training neural networks is the ability to compute
 
 Use the `graph.Gradient(loss, targets...)` function to calculate the gradient of a scalar node (typically the model's loss) with respect to a list of target nodes:
 
+<!-- sync_code: file=core-concepts/gradient/gradient.go tag=grad_fn -->
 ```go
-func gradFn(x, y *Node) (loss, gradX, gradY *Node) {
-    // f(x, y) = x^2 + xy
-    loss = Add(Square(x), Mul(x, y))
-    
-    // Reduce if inputs are not scalars, as Gradient requires a scalar loss
-    scalarLoss := ReduceAllSum(loss)
-    
-    // Calculate gradients df/dx and df/dy symbolically
-    grads := Gradient(scalarLoss, x, y)
-    return loss, grads[0], grads[1]
+func GradFn(x, y *Node) (loss, gradX, gradY *Node) {
+	// f(x, y) = x^2 + xy
+	loss = Add(Square(x), Mul(x, y))
+
+	// Reduce if inputs are not scalars, as Gradient requires a scalar loss
+	scalarLoss := ReduceAllSum(loss)
+
+	// Calculate gradients df/dx and df/dy symbolically
+	grads := Gradient(scalarLoss, x, y)
+	return loss, grads[0], grads[1]
 }
 ```
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/gradient/gradient.go#L9">(See source)</a></small></div>
 
 {{< callout type="note" >}}
 GoMLX currently supports computing the gradient of a scalar value (loss). It does not compute full Jacobians or Hessians directly, though higher-order gradients can be constructed manually by differentiating gradient nodes.
@@ -490,11 +492,11 @@ Output:
 <!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000028 (moving average = 0.000038)
-Step  1999: MSE Loss = 0.000027 (moving average = 0.000034)
-Step  2999: MSE Loss = 0.000020 (moving average = 0.000034)
-Step  3999: MSE Loss = 0.000017 (moving average = 0.000029)
-Step  4999: MSE Loss = 0.000042 (moving average = 0.000025)
+Step   999: MSE Loss = 0.000027 (moving average = 0.000034)
+Step  1999: MSE Loss = 0.000047 (moving average = 0.000025)
+Step  2999: MSE Loss = 0.000010 (moving average = 0.000017)
+Step  3999: MSE Loss = 0.000008 (moving average = 0.000022)
+Step  4999: MSE Loss = 0.000011 (moving average = 0.000019)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```
