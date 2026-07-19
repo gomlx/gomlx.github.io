@@ -6,6 +6,8 @@ weight: 3
 
 ## Overview
 
+<img align="right" src="/img/gopher_gophicasso.jpg" alt="GoMLX Gopher" width="220px"/>
+
 GoMLX is built on a few abstractions. Understanding them makes every other part of the library click:
 
 1. **Backend** — the connection to a hardware backend (CPU, GPU, TPU). It JIT-compiles computation graphs (slow) and
