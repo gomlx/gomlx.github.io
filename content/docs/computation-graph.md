@@ -107,17 +107,14 @@ You call the executor by passing either concrete `*tensors.Tensor` objects or st
 ```go
 import (
 	"fmt"
-
 	"github.com/gomlx/compute"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
 )
-
 // EuclideanDistance between two values.
 func EuclideanDistance(a, b *Node) *Node {
 	return Sqrt(ReduceAllSum(Square(Sub(a, b))))
 }
-
 // 1. Create the executor (that expects 1 output)
 exec, err := NewExec1(backend, EuclideanDistance)
 if err != nil {

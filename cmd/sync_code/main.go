@@ -226,6 +226,7 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 	snippets := make(map[string][]string)
 	firstLineNums := make(map[string]int)
 	lines := strings.Split(goContent, "\n")
+	deltas := make(map[string]int)
 
 	// Regular expression to match trailing //md:<tags> comments
 	reTrailing := regexp.MustCompile(`\s*//md:([^\s]+)\s*$`)
@@ -252,9 +253,11 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 			return
 		}
 		// Adjust indentation of this block
-		adjusted := adjustIndentation(block)
-		if len(snippets[t]) > 0 {
-			snippets[t] = append(snippets[t], "")
+		adjusted := adjustIndentation(block, deltas[t])
+		for idx, l := range adjusted {
+			if l == "__PRESERVED_EMPTY_LINE__" {
+				adjusted[idx] = ""
+			}
 		}
 		snippets[t] = append(snippets[t], adjusted...)
 		currentBlocks[t] = nil
@@ -271,7 +274,11 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 			for _, t := range strings.Split(tagsStr, ",") {
 				t = strings.TrimSpace(t)
 				if t != "" {
-					tags = append(tags, t)
+					name, delta, hasDelta := parseTagOption(t)
+					if hasDelta {
+						deltas[name] = delta
+					}
+					tags = append(tags, name)
 				}
 			}
 			if len(tags) == 0 {
@@ -311,11 +318,18 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 			for _, t := range strings.Split(tagsStr, ",") {
 				t = strings.TrimSpace(t)
 				if t != "" {
-					trailingTags = append(trailingTags, t)
+					name, delta, hasDelta := parseTagOption(t)
+					if hasDelta {
+						deltas[name] = delta
+					}
+					trailingTags = append(trailingTags, name)
 				}
 			}
 			// Strip the trailing tag comment from the code line
 			processedLine = line[:loc[0]]
+			if strings.TrimSpace(processedLine) == "" {
+				processedLine = "__PRESERVED_EMPTY_LINE__"
+			}
 		}
 
 		// Check if it's an import line
@@ -387,14 +401,14 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 // adjustIndentation dedents a list of lines according to the rule:
 // - minTabs := minimum number of prefixing tabs of all non-empty lines.
 // - Remove minTabs tabs from the start of every line.
-func adjustIndentation(lines []string) []string {
+func adjustIndentation(lines []string, delta int) []string {
 	if len(lines) == 0 {
 		return lines
 	}
 
 	minTabs := -1
 	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
+		if strings.TrimSpace(line) == "" || line == "__PRESERVED_EMPTY_LINE__" {
 			continue
 		}
 
@@ -409,21 +423,47 @@ func adjustIndentation(lines []string) []string {
 		}
 	}
 
-	if minTabs <= 0 {
-		return lines
+	if minTabs == -1 {
+		minTabs = 0
 	}
 
-	prefix := strings.Repeat("\t", minTabs)
+	// Calculate target minimum tabs and shift
+	var targetMinTabs int
+	if delta == 0 {
+		targetMinTabs = 0
+	} else {
+		targetMinTabs = minTabs + delta
+		if targetMinTabs < 0 {
+			targetMinTabs = 0
+		}
+	}
+	shift := minTabs - targetMinTabs
+
 	result := make([]string, len(lines))
 	for i, line := range lines {
-		if strings.HasPrefix(line, prefix) {
-			result[i] = strings.TrimPrefix(line, prefix)
-		} else {
-			if strings.TrimSpace(line) == "" {
-				result[i] = ""
-			} else {
-				result[i] = line
+		if line == "__PRESERVED_EMPTY_LINE__" {
+			result[i] = "__PRESERVED_EMPTY_LINE__"
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
+			result[i] = ""
+			continue
+		}
+
+		if shift > 0 {
+			// Remove shift tabs
+			text := line
+			toRemove := shift
+			for toRemove > 0 && len(text) > 0 && text[0] == '\t' {
+				text = text[1:]
+				toRemove--
 			}
+			result[i] = text
+		} else if shift < 0 {
+			// Add -shift tabs
+			result[i] = strings.Repeat("\t", -shift) + line
+		} else {
+			result[i] = line
 		}
 	}
 	return result
@@ -544,7 +584,7 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 
 			// Adjust the common leading indentation
 			snippetLines = trimEmptyLines(snippetLines)
-			adjustedSnippet := adjustIndentation(snippetLines)
+			adjustedSnippet := adjustIndentation(snippetLines, 0)
 
 			fenceStart := "```go"
 			if isOutput {
@@ -892,4 +932,23 @@ func getSourceLinkURL(mode, value, filePath string, lineNum int) string {
 		url = fmt.Sprintf("%s#L%d", url, lineNum)
 	}
 	return url
+}
+
+// parseTagOption parses a tag that might have a delta in parenthesis, e.g. "cell1(-1)" or "cell2".
+// It returns the clean tag name and the delta change (if specified, and whether it was specified).
+func parseTagOption(t string) (name string, delta int, hasDelta bool) {
+	t = strings.TrimSpace(t)
+	// Regular expression to match tag and optional delta, e.g., cell1(-1) or cell1
+	re := regexp.MustCompile(`^([a-zA-Z0-9_\-]+)(?:\((-?[0-9]+)\))?$`)
+	matches := re.FindStringSubmatch(t)
+	if len(matches) == 0 {
+		return t, 0, false
+	}
+	name = matches[1]
+	if matches[2] != "" {
+		var d int
+		_, _ = fmt.Sscanf(matches[2], "%d", &d)
+		return name, d, true
+	}
+	return name, 0, false
 }
