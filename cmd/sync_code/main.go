@@ -252,14 +252,12 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 			currentBlocks[t] = nil
 			return
 		}
-		// Adjust indentation of this block
-		adjusted := adjustIndentation(block, deltas[t])
-		for idx, l := range adjusted {
+		for idx, l := range block {
 			if l == "__PRESERVED_EMPTY_LINE__" {
-				adjusted[idx] = ""
+				block[idx] = ""
 			}
 		}
-		snippets[t] = append(snippets[t], adjusted...)
+		snippets[t] = append(snippets[t], block...)
 		currentBlocks[t] = nil
 	}
 
@@ -267,9 +265,30 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 		lineNum := i + 1
 		trimmed := strings.TrimSpace(line)
 
+		var isStart, isEnd bool
+		var tagsStr string
+
+		// Try to match //md_start: or //md_end:
+		if idx := strings.Index(trimmed, "//md_start:"); idx >= 0 {
+			prefix := strings.TrimSpace(trimmed[:idx])
+			if prefix == "" || prefix == "//" || prefix == "/*" || strings.HasPrefix(prefix, "//") {
+				isStart = true
+				tagsStr = strings.TrimSpace(trimmed[idx+len("//md_start:"):])
+				tagsStr = strings.TrimSuffix(tagsStr, "*/")
+				tagsStr = strings.TrimSpace(tagsStr)
+			}
+		} else if idx := strings.Index(trimmed, "//md_end:"); idx >= 0 {
+			prefix := strings.TrimSpace(trimmed[:idx])
+			if prefix == "" || prefix == "//" || prefix == "/*" || strings.HasPrefix(prefix, "//") {
+				isEnd = true
+				tagsStr = strings.TrimSpace(trimmed[idx+len("//md_end:"):])
+				tagsStr = strings.TrimSuffix(tagsStr, "*/")
+				tagsStr = strings.TrimSpace(tagsStr)
+			}
+		}
+
 		// 1. Control Comment: //md_start:tag1,tag2,...
-		if strings.HasPrefix(trimmed, "//md_start:") {
-			tagsStr := strings.TrimPrefix(trimmed, "//md_start:")
+		if isStart {
 			var tags []string
 			for _, t := range strings.Split(tagsStr, ",") {
 				t = strings.TrimSpace(t)
@@ -292,7 +311,7 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 		}
 
 		// 2. Control Comment: //md_end:
-		if strings.HasPrefix(trimmed, "//md_end:") {
+		if isEnd {
 			if len(activeTagsStack) > 0 {
 				lastIdx := len(activeTagsStack) - 1
 				poppedTags := activeTagsStack[lastIdx]
@@ -374,7 +393,8 @@ func parseGoSnippets(filePath string, goContent string) (map[string][]string, ma
 
 		// Save the processed line to all active and trailing tags
 		for t := range lineTags {
-			currentBlocks[t] = append(currentBlocks[t], processedLine)
+			lineWithDelta := applyIndentationDelta(processedLine, deltas[t])
+			currentBlocks[t] = append(currentBlocks[t], lineWithDelta)
 			// Track the first line number for this tag (excluding import and comment/empty lines)
 			if !isImport && !isCommentOrEmpty && firstLineNums[t] == 0 {
 				firstLineNums[t] = lineNum
@@ -951,4 +971,22 @@ func parseTagOption(t string) (name string, delta int, hasDelta bool) {
 		return name, d, true
 	}
 	return name, 0, false
+}
+
+// applyIndentationDelta adds or removes tabs from the start of a line based on the delta.
+func applyIndentationDelta(line string, d int) string {
+	if line == "__PRESERVED_EMPTY_LINE__" || strings.TrimSpace(line) == "" {
+		return line
+	}
+	if d > 0 {
+		return strings.Repeat("\t", d) + line
+	}
+	if d < 0 {
+		toRemove := -d
+		for toRemove > 0 && len(line) > 0 && line[0] == '\t' {
+			line = line[1:]
+			toRemove--
+		}
+	}
+	return line
 }
