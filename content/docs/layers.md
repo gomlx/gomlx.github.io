@@ -6,7 +6,7 @@ weight: 27
 
 GoMLX comes with a "batteries included" `ml/layers` library, providing a rich set of predefined, highly optimized neural network layers and architectures. 
 
-Most layers use trainable variables (or "weights" or "model parameters"). Those are automatically created in the `model.Store`, at a given _scope_ passed to the layers (the `model.Scope` points to path withing a model's store). If you only have one layer within the current scope, you just pass the scope as is. Otherwise, usually one creates a sub-scope using `scope.In("MyLayer")` or something like `.In("MyLayer_%d", i)` if using multiple of the same type.
+Most layers use trainable variables (or "weights" or "model parameters"). Those are automatically created in the `model.Store`, at a given _scope_ passed to the layers (the `model.Scope` points to path within a model's store). If you only have one layer within the current scope, you just pass the scope as is. Otherwise, usually one creates a sub-scope using `scope.In("MyLayer")` or something like `.In("MyLayer_%d", i)` if using multiple of the same type.
 
 Most of these layers can be automatically configured using hyperparameters stored in the model's store (or a `model.Scope` pointing to one).This simplifies model definition and makes it easy to experiment with different layer types, activations, or normalizations by changing scope hyperparameters rather than changing Go code. 
 
