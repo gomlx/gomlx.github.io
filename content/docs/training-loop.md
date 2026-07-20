@@ -30,7 +30,7 @@ store := model.NewStore()
 // Configure hyperparameters in the model store
 store.SetParams(map[string]any{
 	"batch_size":                128,
-	"train_steps":                1000,
+	"train_steps":               1000,
 	optimizer.ParamOptimizer:    "adam",
 	optimizer.ParamLearningRate: 0.001,
 	activation.ParamActivation:  "relu",
@@ -63,7 +63,7 @@ trainer := train.NewTrainer(
 	[]metric.Interface{meanAccuracy},   // metrics evaluated at eval time
 )
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/training/main.go#L38">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/training/main.go#L39">(See source)</a></small></div>
 
 ### Key Parameters:
 * **`modelFn`**: Any function matching the `ModelFnCompatible` constraint. GoMLX accepts multiple function signatures (e.g., omitting the `spec` parameter or returning 1-3 nodes) and wraps them automatically.
@@ -82,7 +82,7 @@ To run the trainer over a dataset, you wrap it in a `train.Loop` object:
 ```go
 loop := train.NewLoop(trainer)
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/training/main.go#L91">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/training/main.go#L92">(See source)</a></small></div>
 
 The loop maintains the state of execution (like the current step `l.LoopStep`) and exposes a registry to attach callback functions.
 
@@ -124,7 +124,7 @@ train.EveryNSteps(loop, 500, "log_metrics", 0, func(l *train.Loop, metrics []*te
 	return nil
 })
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/training/main.go#L97">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/training/main.go#L98">(See source)</a></small></div>
 
 ### A. Terminal Progress Bar
 `commandline.AttachProgressBar(loop)` attaches a terminal-based progress bar (using the `schollz/progressbar` library) that displays training speed, steps completed, estimated time remaining, and the moving average loss.
@@ -158,7 +158,7 @@ if err != nil {
 }
 fmt.Println("Training complete!")
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/training/main.go#L129">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/training/main.go#L130">(See source)</a></small></div>
 
 ### Execution Options: `RunSteps`, `RunToGlobalStep`, and `RunEpochs`
 * **`loop.RunSteps(dataset, steps)`**: Runs the training loop for an absolute number of steps from the current state.
