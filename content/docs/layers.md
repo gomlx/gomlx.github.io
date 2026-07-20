@@ -92,13 +92,18 @@ The complete list of supported activations includes:
 * **`tanh`**: Hyperbolic Tangent activation.
 * **`gelu`**: Gaussian Error Linear Unit.
 * **`gelu_approx`** (alias **`gelu_pytorch_tanh`**): Highly efficient approximation of GELU.
-* **`swiglu`**: Swish-Gated Linear Unit (commonly used in modern LLMs like LLaMA; increases the hidden dimension multiplier by 2).
+* **`swiglu`**: Swish-Gated Linear Unit (commonly used in modern LLMs like LLaMA). It requires the input to have 2*hiddenDimension, half used as _value_, half as _gating_.
+
+Examples:
 
 ```go
 import "github.com/gomlx/gomlx/ml/layers/activation"
 
+// RELU activation.
 h = activation.Relu(h)
-h = activation.SwiGLU(h)
+
+// Apply activation configured (hyperparameter) in current scope.
+h = activation.ApplyFromScope(scope, h)
 ```
 
 ---
