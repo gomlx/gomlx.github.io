@@ -300,7 +300,7 @@ the memory, but it may hold to it too long.
 ```go
 // Tensors allocate memory on accelerator devices (GPU, TPU).
 // Because the Go Garbage Collector cannot track device memory,
-// you should finalize tensors that are no longer in use, to speed up release.
+// you must finalize tensors that are no longer in use to prevent memory leaks.
 err := t.FinalizeAll()
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/tensors/main.go#L41">(See source)</a></small></div>
@@ -398,12 +398,13 @@ func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
 	// Compute x * weights + biases
 	return Add(Dot(x, weights).Product(), biases)
 }
-	modelFn := func(scope *model.Scope, x *Node) *Node {
-		// Use scope.In to partition variable names under sub-scopes:
-		h := denseLayer(scope.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
-		y := denseLayer(scope.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
-		return y
-	}
+
+modelFn := func(scope *model.Scope, x *Node) *Node {
+	// Use scope.In to partition variable names under sub-scopes:
+	h := denseLayer(scope.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
+	y := denseLayer(scope.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
+	return y
+}
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/store/main.go#L17">(See source)</a></small></div>
 
@@ -418,7 +419,7 @@ for v := range store.IterVariables() {
 	fmt.Printf("Variable: %s, shape: %s\n", v.Path(), v.Shape())
 }
 ```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/store/main.go#L76">(See source)</a></small></div>
+<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/store/main.go#L77">(See source)</a></small></div>
 
 Output:
 
@@ -518,11 +519,11 @@ Output:
 <!-- sync_code: file=core-concepts/training/main.go output_tag=training -->
 ```
 Starting training loop...
-Step   999: MSE Loss = 0.000035 (moving average = 0.000037)
-Step  1999: MSE Loss = 0.000025 (moving average = 0.000020)
-Step  2999: MSE Loss = 0.000019 (moving average = 0.000026)
-Step  3999: MSE Loss = 0.000012 (moving average = 0.000019)
-Step  4999: MSE Loss = 0.000011 (moving average = 0.000024)
+Step   999: MSE Loss = 0.000038 (moving average = 0.000040)
+Step  1999: MSE Loss = 0.000067 (moving average = 0.000027)
+Step  2999: MSE Loss = 0.000012 (moving average = 0.000030)
+Step  3999: MSE Loss = 0.000010 (moving average = 0.000019)
+Step  4999: MSE Loss = 0.000013 (moving average = 0.000018)
 Training finished!
 Successfully reconstructed image saved to reconstructed.png
 ```
