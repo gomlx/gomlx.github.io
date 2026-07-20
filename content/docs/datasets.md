@@ -78,6 +78,8 @@ for {
 
 The `github.com/gomlx/gomlx/ml/dataset` package provides several "meta-datasets" that wrap an existing dataset to optimize preprocessing and memory transfers.
 
+These allows one with very little effort to easily create, parallelize, buffer and transform a dataset from any data, large or small.
+
 | Meta-Dataset | Creation Helper | Description |
 | :--- | :--- | :--- |
 | **`InMemory`** | `InMemoryFromData` | Loads the entire dataset into CPU/device memory. It slices batches **directly on the device** using a JIT-compiled gather graph, avoiding slow host-to-device copies during training loops. |
@@ -91,10 +93,12 @@ The `github.com/gomlx/gomlx/ml/dataset` package provides several "meta-datasets"
 
 ## Code Example: UCI-Adult Dataset
 
-The UCI-Adult census example (`github.com/gomlx/gomlx/examples/adult`) demonstrates how to construct and configure an `InMemoryDataset` for model training and evaluation.
+The UCI-Adult census example (`github.com/gomlx/gomlx/examples/adult`) dataset is pretty small and can be fully read
+into memory. It demonstrates how to construct and configure an `InMemoryDataset` for model training and evaluation.
 
 ### 1. Constructing the Dataset
-The dataset is loaded as raw categorical and continuous values, converted to device tensors, and wrapped into an `InMemoryDataset` using `dataset.InMemoryFromData`:
+The dataset is loaded as raw categorical and continuous values (`adult.RawData` structure), converted to device tensors,
+and wrapped into an `InMemoryDataset` using `dataset.InMemoryFromData`:
 
 ```go
 func NewDataset(backend compute.Backend, rawData *RawData, name string) *dataset.InMemoryDataset {
@@ -113,17 +117,20 @@ func NewDataset(backend compute.Backend, rawData *RawData, name string) *dataset
 ```
 
 ### 2. Configuring Iteration Modes
-Once created, you configure the dataset behavior using fluent methods. Note that `InMemoryDataset` supports `.Copy()` so you can reuse the same in-memory data for training and evaluation with different batch sizes:
+Once created, you configure the dataset in different ways for training (shuffle, infinitely looping) and evaluation (no shuffling, one epoch).
+
+Note that `InMemoryDataset` supports `.Copy()` so you can reuse the same in-memory data for training and evaluation with different batch sizes:
 
 ```go
-// Create base in-memory dataset
-inMemoryDS := NewDataset(backend, trainRawData, "train")
+// A. Create base in-memory dataset for testing --the default configuration
+//    has no shuffling and yields one epoch only.
+testEvalDS  := adult.NewDataset(backend, adult.Data.Test, "test").BatchSize(batchSize, false)
 
-// A. Configure dataset for training: shuffle and loop infinitely
-trainDS := inMemoryDS.BatchSize(128, true).Shuffle().Infinite(true)
+// B. Eval on training: no shuffling and one epoch.
+baseTrainDS := adult.NewDataset(backend, adult.Data.Train, "batched train")
+trainEvalDS := baseTrainDS.BatchSize(batchSize, false)
 
-// B. Configure dataset for evaluation: copy the underlying data,
-// but disable infinite looping and shuffling to run exactly one epoch.
-trainEvalDS := inMemoryDS.Copy().BatchSize(128, false)
-testEvalDS  := NewDataset(backend, testRawData, "test").BatchSize(128, false)
+// C. Copy the underlying data (shallow, only references are copied), and configure
+//    to loop indefinitely and shuffling for training. 
+trainDS := baseTrainDS.BatchSize(batchSize, true).Shuffle().Infinite(true)
 ```
