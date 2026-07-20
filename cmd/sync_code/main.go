@@ -91,7 +91,7 @@ func main() {
 		klog.V(1).Infof("Syncing code snippets for %s...", file)
 		changed, err := processMarkdownFile(file, mode, ref)
 		if err != nil {
-			klog.V(1).Infof("Error processing %s: %v", file, err)
+			klog.Errorf("Error processing %s: %v", file, err)
 			errorCount++
 		} else {
 			if changed {
@@ -222,10 +222,11 @@ func getFileContent(mode, value, filePath string) ([]byte, error) {
 
 // parseGoSnippets parses all snippets annotated with //md: or //md_start://md_end: blocks in a Go file.
 // It returns a map of tag -> lines, and a map of tag -> first line number (excluding imports).
-func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
+func parseGoSnippets(filePath string, goContent string) (map[string][]string, map[string]int, error) {
 	snippets := make(map[string][]string)
 	firstLineNums := make(map[string]int)
 	lines := strings.Split(goContent, "\n")
+	deltas := make(map[string]int)
 
 	// Regular expression to match trailing //md:<tags> comments
 	reTrailing := regexp.MustCompile(`\s*//md:([^\s]+)\s*$`)
@@ -233,24 +234,74 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 	var activeTagsStack [][]string
 	activeTagsMap := make(map[string]int) // tracks counts of active tags to handle nested active tags cleanly
 
-	var braceDepth int
-	var inMultiLineComment, inString, inBacktick bool
-	var inFunc bool
+	var inMultiLineComment bool
 	var inImportBlock bool
+
+	// To track the current block of lines for each tag:
+	currentBlocks := make(map[string][]string)
+
+	// A helper to flush a block for tag t:
+	flushBlock := func(t string) {
+		block := currentBlocks[t]
+		if len(block) == 0 {
+			return
+		}
+		// Trim leading/trailing empty lines of this block
+		block = trimEmptyLines(block)
+		if len(block) == 0 {
+			currentBlocks[t] = nil
+			return
+		}
+		for idx, l := range block {
+			if l == "__PRESERVED_EMPTY_LINE__" {
+				block[idx] = ""
+			}
+		}
+		snippets[t] = append(snippets[t], block...)
+		currentBlocks[t] = nil
+	}
 
 	for i, line := range lines {
 		lineNum := i + 1
 		trimmed := strings.TrimSpace(line)
 
+		var isStart, isEnd bool
+		var tagsStr string
+
+		// Try to match //md_start: or //md_end:
+		if idx := strings.Index(trimmed, "//md_start:"); idx >= 0 {
+			prefix := strings.TrimSpace(trimmed[:idx])
+			if prefix == "" || prefix == "//" || prefix == "/*" || strings.HasPrefix(prefix, "//") {
+				isStart = true
+				tagsStr = strings.TrimSpace(trimmed[idx+len("//md_start:"):])
+				tagsStr = strings.TrimSuffix(tagsStr, "*/")
+				tagsStr = strings.TrimSpace(tagsStr)
+			}
+		} else if idx := strings.Index(trimmed, "//md_end:"); idx >= 0 {
+			prefix := strings.TrimSpace(trimmed[:idx])
+			if prefix == "" || prefix == "//" || prefix == "/*" || strings.HasPrefix(prefix, "//") {
+				isEnd = true
+				tagsStr = strings.TrimSpace(trimmed[idx+len("//md_end:"):])
+				tagsStr = strings.TrimSuffix(tagsStr, "*/")
+				tagsStr = strings.TrimSpace(tagsStr)
+			}
+		}
+
 		// 1. Control Comment: //md_start:tag1,tag2,...
-		if strings.HasPrefix(trimmed, "//md_start:") {
-			tagsStr := strings.TrimPrefix(trimmed, "//md_start:")
+		if isStart {
 			var tags []string
 			for _, t := range strings.Split(tagsStr, ",") {
 				t = strings.TrimSpace(t)
 				if t != "" {
-					tags = append(tags, t)
+					name, delta, hasDelta := parseTagOption(t)
+					if hasDelta {
+						deltas[name] = delta
+					}
+					tags = append(tags, name)
 				}
+			}
+			if len(tags) == 0 {
+				return nil, nil, fmt.Errorf("%s:%d: //md_start has no tags specified", filePath, lineNum)
 			}
 			activeTagsStack = append(activeTagsStack, tags)
 			for _, t := range tags {
@@ -260,7 +311,7 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 		}
 
 		// 2. Control Comment: //md_end:
-		if strings.HasPrefix(trimmed, "//md_end:") {
+		if isEnd {
 			if len(activeTagsStack) > 0 {
 				lastIdx := len(activeTagsStack) - 1
 				poppedTags := activeTagsStack[lastIdx]
@@ -273,7 +324,7 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 					}
 				}
 			} else {
-				activeTagsMap = make(map[string]int)
+				return nil, nil, fmt.Errorf("%s:%d: unmatched //md_end: (no active md_start block)", filePath, lineNum)
 			}
 			continue
 		}
@@ -286,11 +337,18 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 			for _, t := range strings.Split(tagsStr, ",") {
 				t = strings.TrimSpace(t)
 				if t != "" {
-					trailingTags = append(trailingTags, t)
+					name, delta, hasDelta := parseTagOption(t)
+					if hasDelta {
+						deltas[name] = delta
+					}
+					trailingTags = append(trailingTags, name)
 				}
 			}
 			// Strip the trailing tag comment from the code line
 			processedLine = line[:loc[0]]
+			if strings.TrimSpace(processedLine) == "" {
+				processedLine = "__PRESERVED_EMPTY_LINE__"
+			}
 		}
 
 		// Check if it's an import line
@@ -309,28 +367,12 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 		}
 
 		// Check if it's a comment or empty line
-		isCommentOrEmpty := false
-		if inMultiLineComment || cleanLine == "" || strings.HasPrefix(cleanLine, "//") || strings.HasPrefix(cleanLine, "/*") {
-			isCommentOrEmpty = true
+		if strings.HasPrefix(cleanLine, "/*") {
+			inMultiLineComment = true
 		}
-
-		// Check if a function is starting at package level
-		if braceDepth == 0 && strings.HasPrefix(cleanLine, "func ") {
-			inFunc = true
-		}
-
-		// Update brace depth based on the processed line
-		braceDepth = updateBraceDepth(processedLine, braceDepth, &inMultiLineComment, &inString, &inBacktick)
-
-		// If we are inside a function block, strip the first level of indentation
-		if inFunc {
-			processedLine = stripOneLevelOfIndentation(processedLine)
-		}
-
-		// If brace depth returns to 0 (or less), we are no longer inside a function
-		if braceDepth <= 0 {
-			inFunc = false
-			braceDepth = 0
+		isCommentOrEmpty := inMultiLineComment || cleanLine == "" || strings.HasPrefix(cleanLine, "//")
+		if strings.HasSuffix(cleanLine, "*/") {
+			inMultiLineComment = false
 		}
 
 		// Gather all unique tags for this line
@@ -342,9 +384,17 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 			lineTags[t] = true
 		}
 
+		// Flush tags that are no longer active on this line
+		for t := range currentBlocks {
+			if !lineTags[t] {
+				flushBlock(t)
+			}
+		}
+
 		// Save the processed line to all active and trailing tags
 		for t := range lineTags {
-			snippets[t] = append(snippets[t], processedLine)
+			lineWithDelta := applyIndentationDelta(processedLine, deltas[t])
+			currentBlocks[t] = append(currentBlocks[t], lineWithDelta)
 			// Track the first line number for this tag (excluding import and comment/empty lines)
 			if !isImport && !isCommentOrEmpty && firstLineNums[t] == 0 {
 				firstLineNums[t] = lineNum
@@ -352,143 +402,88 @@ func parseGoSnippets(goContent string) (map[string][]string, map[string]int) {
 		}
 	}
 
-	return snippets, firstLineNums
+	// Flush any remaining active blocks in currentBlocks
+	for t := range currentBlocks {
+		flushBlock(t)
+	}
+
+	if len(activeTagsStack) > 0 {
+		var unclosedTags []string
+		for _, tags := range activeTagsStack {
+			unclosedTags = append(unclosedTags, tags...)
+		}
+		return nil, nil, fmt.Errorf("%s: unclosed //md_start block(s) for tags: %s", filePath, strings.Join(unclosedTags, ", "))
+	}
+
+	return snippets, firstLineNums, nil
 }
 
-// updateBraceDepth counts matching curly braces while ignoring string literals and comments.
-func updateBraceDepth(line string, currentDepth int, inMultiLineComment, inString, inBacktick *bool) int {
-	depth := currentDepth
-	i := 0
-	for i < len(line) {
-		if *inMultiLineComment {
-			if i+1 < len(line) && line[i] == '*' && line[i+1] == '/' {
-				*inMultiLineComment = false
-				i += 2
-			} else {
-				i++
-			}
-			continue
-		}
-
-		if *inString {
-			if line[i] == '\\' {
-				i += 2 // skip escaped character
-			} else if line[i] == '"' {
-				*inString = false
-				i++
-			} else {
-				i++
-			}
-			continue
-		}
-
-		if *inBacktick {
-			if line[i] == '`' {
-				*inBacktick = false
-				i++
-			} else {
-				i++
-			}
-			continue
-		}
-
-		if i+1 < len(line) && line[i] == '/' && line[i+1] == '/' {
-			break // comment starts, rest of the line is ignored
-		}
-		if i+1 < len(line) && line[i] == '/' && line[i+1] == '*' {
-			*inMultiLineComment = true
-			i += 2
-			continue
-		}
-
-		if line[i] == '"' {
-			*inString = true
-			i++
-			continue
-		}
-		if line[i] == '`' {
-			*inBacktick = true
-			i++
-			continue
-		}
-
-		if line[i] == '{' {
-			depth++
-		} else if line[i] == '}' {
-			depth--
-		}
-		i++
-	}
-	return depth
-}
-
-// stripOneLevelOfIndentation strips one leading tab or four leading spaces from a line.
-func stripOneLevelOfIndentation(line string) string {
-	if strings.HasPrefix(line, "\t") {
-		return strings.TrimPrefix(line, "\t")
-	}
-	if strings.HasPrefix(line, "    ") {
-		return strings.TrimPrefix(line, "    ")
-	}
-	return line
-}
-
-// adjustIndentation dedents a list of lines so that the minimum common indentation is removed.
-func adjustIndentation(lines []string) []string {
+// adjustIndentation dedents a list of lines according to the rule:
+// - minTabs := minimum number of prefixing tabs of all non-empty lines.
+// - Remove minTabs tabs from the start of every line.
+func adjustIndentation(lines []string, delta int) []string {
 	if len(lines) == 0 {
 		return lines
 	}
 
-	var commonPrefix *string
+	minTabs := -1
 	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
+		if strings.TrimSpace(line) == "" || line == "__PRESERVED_EMPTY_LINE__" {
 			continue
 		}
 
-		// Identify leading whitespace
-		var idx int
-		for idx < len(line) && (line[idx] == ' ' || line[idx] == '\t') {
-			idx++
+		// Count leading tabs
+		tabs := 0
+		for tabs < len(line) && line[tabs] == '\t' {
+			tabs++
 		}
-		leading := line[:idx]
 
-		if commonPrefix == nil {
-			p := leading
-			commonPrefix = &p
-		} else {
-			common := *commonPrefix
-			limit := len(common)
-			if len(leading) < limit {
-				limit = len(leading)
-			}
-			matchLen := 0
-			for i := 0; i < limit; i++ {
-				if common[i] == leading[i] {
-					matchLen++
-				} else {
-					break
-				}
-			}
-			p := common[:matchLen]
-			commonPrefix = &p
+		if minTabs == -1 || tabs < minTabs {
+			minTabs = tabs
 		}
 	}
 
-	if commonPrefix == nil || *commonPrefix == "" {
-		return lines
+	if minTabs == -1 {
+		minTabs = 0
 	}
 
-	prefix := *commonPrefix
+	// Calculate target minimum tabs and shift
+	var targetMinTabs int
+	if delta == 0 {
+		targetMinTabs = 0
+	} else {
+		targetMinTabs = minTabs + delta
+		if targetMinTabs < 0 {
+			targetMinTabs = 0
+		}
+	}
+	shift := minTabs - targetMinTabs
+
 	result := make([]string, len(lines))
 	for i, line := range lines {
-		if strings.HasPrefix(line, prefix) {
-			result[i] = strings.TrimPrefix(line, prefix)
-		} else {
-			if strings.TrimSpace(line) == "" {
-				result[i] = ""
-			} else {
-				result[i] = line
+		if line == "__PRESERVED_EMPTY_LINE__" {
+			result[i] = "__PRESERVED_EMPTY_LINE__"
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
+			result[i] = ""
+			continue
+		}
+
+		if shift > 0 {
+			// Remove shift tabs
+			text := line
+			toRemove := shift
+			for toRemove > 0 && len(text) > 0 && text[0] == '\t' {
+				text = text[1:]
+				toRemove--
 			}
+			result[i] = text
+		} else if shift < 0 {
+			// Add -shift tabs
+			result[i] = strings.Repeat("\t", -shift) + line
+		} else {
+			result[i] = line
 		}
 	}
 	return result
@@ -542,7 +537,10 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to load Go file: %w", err)
 			}
-			lines, lineNums := parseGoSnippets(string(goContent))
+			lines, lineNums, err := parseGoSnippets(filePath, string(goContent))
+			if err != nil {
+				return nil, 0, err
+			}
 			snippets = GoSnippets{Lines: lines, FirstLineNum: lineNums}
 			fileSnippetsCache[filePath] = snippets
 		}
@@ -593,20 +591,20 @@ func processMarkdownFile(mdPath string, mode, value string) (bool, error) {
 			if isOutput {
 				snippetLines, err = getOutputSnippet(targetFile, targetTag)
 				if err != nil {
-					return false, fmt.Errorf("error resolving output snippet for %s (tag=%s): %w", targetFile, targetTag, err)
+					return false, fmt.Errorf("line %d: error resolving output snippet for %s (tag=%s): %w", i+1, targetFile, targetTag, err)
 				}
 			} else {
 				snippetLines, lineNum, err = getSnippet(targetFile, targetTag)
 				if err != nil {
-					return false, fmt.Errorf("error resolving code snippet for %s (tag=%s): %w", targetFile, targetTag, err)
+					return false, fmt.Errorf("line %d: error resolving code snippet for %s (tag=%s): %w", i+1, targetFile, targetTag, err)
 				}
 				linkURL := getSourceLinkURL(mode, value, targetFile, lineNum)
 				linkLine = fmt.Sprintf(`<div align="right"><small><a href="%s">(See source)</a></small></div>`, linkURL)
 			}
 
 			// Adjust the common leading indentation
-			snippetLines = trimTrailingEmptyLines(snippetLines)
-			adjustedSnippet := adjustIndentation(snippetLines)
+			snippetLines = trimEmptyLines(snippetLines)
+			adjustedSnippet := adjustIndentation(snippetLines, 0)
 
 			fenceStart := "```go"
 			if isOutput {
@@ -896,17 +894,13 @@ func runGoProgram(mode, value, filePath string) ([]byte, error) {
 	cmd := exec.Command("go", "run", relPath)
 	cmd.Dir = repoPath
 
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
 	klog.V(1).Infof("Running command: go run %s (Dir: %s)", relPath, repoPath)
-	err = cmd.Run()
+	combined, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("go run failed: %v\nStderr: %s", err, stderr.String())
+		return nil, fmt.Errorf("go run failed: %v\nOutput:\n%s", err, string(combined))
 	}
 
-	return []byte(stdout.String()), nil
+	return combined, nil
 }
 
 // parseOutputSnippets parses stdout lines matching `md:<tag>` blocks.
@@ -929,8 +923,13 @@ func parseOutputSnippets(output string) map[string][]string {
 	return snippets
 }
 
-// trimTrailingEmptyLines removes trailing empty/whitespace-only lines from a slice of string lines.
-func trimTrailingEmptyLines(lines []string) []string {
+// trimEmptyLines removes leading and trailing empty/whitespace-only lines from a slice of string lines.
+func trimEmptyLines(lines []string) []string {
+	// Trim leading empty lines
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	// Trim trailing empty lines
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
@@ -949,4 +948,41 @@ func getSourceLinkURL(mode, value, filePath string, lineNum int) string {
 		url = fmt.Sprintf("%s#L%d", url, lineNum)
 	}
 	return url
+}
+
+// parseTagOption parses a tag that might have a delta in parenthesis, e.g. "cell1(-1)" or "cell2".
+// It returns the clean tag name and the delta change (if specified, and whether it was specified).
+func parseTagOption(t string) (name string, delta int, hasDelta bool) {
+	t = strings.TrimSpace(t)
+	// Regular expression to match tag and optional delta, e.g., cell1(-1) or cell1
+	re := regexp.MustCompile(`^([a-zA-Z0-9_\-]+)(?:\((-?[0-9]+)\))?$`)
+	matches := re.FindStringSubmatch(t)
+	if len(matches) == 0 {
+		return t, 0, false
+	}
+	name = matches[1]
+	if matches[2] != "" {
+		var d int
+		_, _ = fmt.Sscanf(matches[2], "%d", &d)
+		return name, d, true
+	}
+	return name, 0, false
+}
+
+// applyIndentationDelta adds or removes tabs from the start of a line based on the delta.
+func applyIndentationDelta(line string, d int) string {
+	if line == "__PRESERVED_EMPTY_LINE__" || strings.TrimSpace(line) == "" {
+		return line
+	}
+	if d > 0 {
+		return strings.Repeat("\t", d) + line
+	}
+	if d < 0 {
+		toRemove := -d
+		for toRemove > 0 && len(line) > 0 && line[0] == '\t' {
+			line = line[1:]
+			toRemove--
+		}
+	}
+	return line
 }

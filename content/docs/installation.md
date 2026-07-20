@@ -1,12 +1,10 @@
 ---
 title: "Installation"
-lead: "Get GoMLX running in your Go project in under five minutes."
+lead: "For most users, no installation is needed"
 weight: 1
 ---
 
 ## <a id="installation"></a>🛠️ + ⚙️ Installation 
-
-**For most users, no installation is needed.**
 
 **For XLA**, it will by default auto-install the required XLA PJRT plugins (for CPU, GPU and TPUs; Linux and Macs)
 in the user's local lib directory (`$HOME/.local/lib/go-xla` in Linux; `$HOME/Library/Application Support/go-xla` in Mac;

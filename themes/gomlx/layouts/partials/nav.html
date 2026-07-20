@@ -62,17 +62,5 @@
           if (stripForks) stripForks.textContent = formatNum(data.forks_count);
         }
       }).catch(err => console.debug('Could not fetch repo stats:', err));
-
-    // Fetch Latest Release Version
-    fetch(repoUrl + '/releases/latest')
-      .then(res => res.json())
-      .then(data => {
-        if (data.tag_name) {
-          const navVersion = document.getElementById('gomlx-version');
-          const stripVersion = document.getElementById('strip-gomlx-version');
-          if (navVersion) navVersion.textContent = data.tag_name;
-          if (stripVersion) stripVersion.textContent = data.tag_name;
-        }
-      }).catch(err => console.debug('Could not fetch latest release:', err));
   })();
 </script>

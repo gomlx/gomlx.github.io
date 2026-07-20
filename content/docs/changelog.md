@@ -9,7 +9,7 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 
 ---
 
-# (In progress) v0.28.0: Large API and Packages Cleanup and Reorganization:
+# (In progress) v0.28.0: Large API and Packages Improvements, Cleanups and Reorganization:
 
 To faciliate conversion to this updated API, we added the CLI tool `cmd/convert_v0.28`.
 It won't fully fix the code (mostly because of the `context.Context` to `model.Store`/`model.Scope` redesign),
@@ -24,6 +24,17 @@ go run <path_to_gomlx>/cmd/convert_v0.28/main.go [-dir <directory>]
 
 ## API Changes: `backends` and related packages moved to `github.com/gomlx/compute`
 
+**Highlights**:
+- Experimental SIMD support for amd64 for the Go backend.
+- Gradiend Checkpointing: needed when training large models, to trade-off memory usage for recomputation.
+- Transformers library that support many more classes of LLMs.
+- LLM generator (that works this time), with KVCache support.
+- The "xla" backend now supports many more options, including `preallocate=false` to prevent preallocating 75% of the 
+  GPU memory (for `xla:cuda`) upfront. Use `GOMLX_BACKEND=xla:help` and it will printout help on all options. 
+- Added _FlashAttention_ for `xla:cuda` backends -- mimicking what Jax does, using `cuDNN` implementation.
+  Including backward propagation version, for faster training.
+
+**API Changes**:
 - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`
 - New `github.com/gomlx/compute` repo will host what was in package `backends`.
   - `backends/simplego` backend now moved to `github.com/gomlx/compute/gobackend` (no longer "simple").
@@ -57,11 +68,13 @@ And a few small renaming:
 - `ml/train/losses` -> `ml/train/loss`
 
 
-## **Scope Redesign** now in package `model`
+## **Scope Redesign**
 - Package `context` -> `model`
 - `Scope` -> `Store` and `Scope`
 - `NewScope` -> `NewStore` (the only "global" one)
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
+  - New `Exec` wrappers for fixed number of outputs: `NewExec1()`, `NewExec2()` and `NewExec3()` for graphs with one,
+    two or three outputs.
 - Using mostly `fullPath` instead of the split scope/key pairs.
 - Variables:
   - `Scope.VariableWithValueGraph` -> `Scope.VariableWithNodeValue`
@@ -76,19 +89,46 @@ And a few small renaming:
   the Graph is destroyed (preventing some leaks).
 
 ## Package `ml/train`: 
+- `NewTrainer` now accepts generic functions matching the `ModelFnCompatible` constraint. This allows `modelFn`
+  signatures to omit the `spec` parameter if not used, use named `*graph.Node` input parameters, and return a single
+  `*graph.Node` (or up to 3 nodes) directly instead of a slice. The passed functions are automatically converted to the
+  canonical signature.
+  - All standard examples (`adult`, `cifar`, `mnist`, `dogsvscats`) and their corresponding Jupyter Notebooks have been
+    updated to use these simplified/cleaner signatures.
+- `Dataset` API change: updated to use iterators, and now yields a `Batch` struct -- more convenient if we need
+  future extensions, and easier to ignore non-used fields (like `Spec`).
 - Clarification of main loss vs regularization loss in `ml/train`, added: 
   - `AddMainLoss`/`GetMainLoss` to accumulate the main model losses; 
   - `AddRegularizationLoss`/`GetRegularizationLoss` to accumulate regularization losses;
   - `TotalLoss` to return their sum.
   - Older API marked as deprecated.
-  - Changed default loss metrics behavior to only return the total loss by default (named "Loss" / "~loss"). Added `WithMainLossMetric()` method to include the "no-reg" metrics when requested.
+  - Changed default loss metrics behavior to only return the total loss by default (named "Loss" / "~loss"). Added
+    `WithMainLossMetric()` method to include the "no-reg" metrics when requested.
+
+## Package `ml/dataset`:
+  - Updated `Dataset` and `Batch` types, and adjusted various datasets implementations accordingly.
+  - Added `dataset.Buffered`, that pre-calculates the dataset.
+  - Added `dataset.Map`, `dataset.ParallelMap`, `dataset.MapOnHost` and `dataset.ParallelMapOnHost` to transform datasets.
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
-
+  - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or
+    three outputs.
+- New ops:
+  - `SchedulingBarrier` and `OptimizationBarrier`: they are implemented in the Go and XLA backends. 
+- Gradient Checkpointing: Added `Node.Checkpoint()` and `Node.StopCheckpoint()`.
+- Updates to `FusedScaledDotProductAttention`, including adding support to the corresponding VJP: enabling the **flash attention** in XLA+CUDA.
+ 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
 
+## Other improvements
+
+- Redesigned KVCache implementation (previous was broken) in `ml/layers/attention/kvcache`: it is used by packages `attention`, `transformer` and `decode`.
+- Many improvements to `ml/zoo/transformer`: it nows support Gemma4 class of transformer models.
+- Added `nn.SoftCap` and in the `ml/layers/attention` added support for attention scores soft-cap (used by Gemma models).
+- Added `activation.SwiGLU` for Swish Gated Linear activation, and updated corresponding support in the `fnn` package.
+- Added Dynamic Tanh (DyT) "pseudo" normalizer (https://arxiv.org/abs/2503.10622).
 
 ---
 
@@ -168,7 +208,7 @@ And a few small renaming:
   - Added constants to normalization types.
 
 ### Backends:
-- Backend `xla`:
+- Backend "xla":
   - Updated dependency to `github.com/gomlx/go-xla` to v0.2.2: with a fix to NVIDIA CUDA drivers path.
   - DotGeneral with unsupported accumulation dtypes (only float32 is supported): it automatically converts the
    input dtype to the accumulation dtype first.
@@ -177,7 +217,7 @@ And a few small renaming:
   - Added "hack" dependency on the weights of a DotGeneral operation to the lhs operand of the DotGeneral operation,
     to hugely decrease temporary memory usage. See issue in https://github.com/openxla/stablehlo/issues/2923
     
-- Backend `simplego` ("go"):
+- Backend "go":
   - DotGeneral with accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
     (With the exception of half-precision types, which use float32 as accumulator by default).
 

@@ -28,6 +28,9 @@
 
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="{{ "img/favicon.svg" | relURL }}">
+
+  <!-- KaTeX Math Rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
 </head>
 
 <body>
@@ -46,6 +49,45 @@
   {{ if $mainJs }}
   <script src="{{ $mainJs.RelPermalink }}"></script>
   {{ end }}
+
+  {{ if .Store.Get "hasMermaid" }}
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' || 
+                   document.documentElement.classList.contains('dark') || 
+                   window.matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: isDark ? 'dark' : 'default'
+    });
+  </script>
+  {{ end }}
+
+  <!-- KaTeX Auto-render Setup -->
+  <script defer src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex/dist/contrib/auto-render.min.js" onload="tryRenderMath()"></script>
+  <script>
+    function tryRenderMath() {
+      if (window.gomlxMathRendered) return;
+      if (typeof renderMathInElement === 'function') {
+        renderMathInElement(document.body, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false},
+            {left: '\\(', right: '\\)', display: false},
+            {left: '\\[', right: '\\]', display: true}
+          ],
+          throwOnError : false
+        });
+        window.gomlxMathRendered = true;
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener("DOMContentLoaded", tryRenderMath);
+    } else {
+      tryRenderMath();
+    }
+  </script>
 </body>
 
 </html>

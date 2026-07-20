@@ -127,17 +127,4 @@
     }, { passive: true });
   }
 
-  /* ── Dynamic version fetch (fallback if not rebuilt recently) ── */
-  const versionSpan = document.getElementById('gomlx-version');
-  if (versionSpan) {
-    fetch('https://api.github.com/repos/gomlx/gomlx/releases/latest')
-      .then(res => res.json())
-      .then(data => {
-        if (data.tag_name) {
-          versionSpan.textContent = data.tag_name;
-        }
-      })
-      .catch(err => console.debug('Could not fetch latest GoMLX version:', err));
-  }
-
 })();
