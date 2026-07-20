@@ -300,44 +300,16 @@ the memory, but it may hold to it too long.
 ```go
 // Tensors allocate memory on accelerator devices (GPU, TPU).
 // Because the Go Garbage Collector cannot track device memory,
-// you must finalize tensors that are no longer in use to prevent memory leaks.
-t.MustFinalizeAll()
+// you should finalize tensors that are no longer in use, to speed up release.
+err := t.FinalizeAll()
 ```
 <div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/tensors/main.go#L41">(See source)</a></small></div>
 
-### Images
-
-The `github.com/gomlx/gomlx/core/tensors/images` package provides utilities to load standard Go images into tensors and export them back. When loading image batches, the resulting tensor shape is `[batch_size, height, width, channels]`:
-
-<!-- sync_code: file=core-concepts/tensors/main.go tag=image -->
-```go
-// Create two simple blank images (e.g. 100x100 RGB).
-img1 := image.NewRGBA(image.Rect(0, 0, 100, 100))
-img2 := image.NewRGBA(image.Rect(0, 0, 100, 100))
-
-// Load the batch of images into a Float32 tensor.
-// The resulting shape is [batch_size, height, width, channels].
-imagesTensor := timages.ToTensor(dtypes.Float32).Batch([]image.Image{img1, img2})
-fmt.Printf("Batch images shape: %s\n", imagesTensor.Shape())
-```
-<div align="right"><small><a href="https://github.com/gomlx/gomlx/blob/main/examples/gomlx.github.io/core-concepts/tensors/main.go#L49">(See source)</a></small></div>
-
-Output:
-
-<!-- sync_code: file=core-concepts/tensors/main.go output_tag=image -->
-```
-Batch images shape: (Float32)[2, 100, 100, 3]
-```
-
-{{< callout type="info" >}}
-GoMLX uses the **NHWC** (`[batch_size, height, width, channels]`) layout for images by default. If you are porting models from frameworks like PyTorch that default to `NCHW` (`[batch_size, channels, height, width]`), you will need to transpose the axes (e.g. using `graph.Transpose` or configuring the layers accordingly).
-{{< /callout >}}
-
----
-
 ## Gradients & Automatic Differentiation
 
-A fundamental requirement for training neural networks is the ability to compute gradients. GoMLX performs automatic differentiation symbolically during the graph building phase. It automatically appends the mathematical operations required for back-propagation directly into the compiled graph.
+A fundamental requirement for training neural networks is the ability to compute gradients. 
+GoMLX performs automatic symbolic differentiation during the graph building phase. 
+It automatically appends the mathematical operations required for back-propagation directly into the computation graph.
 
 Use the `graph.Gradient(loss, targets...)` function to calculate the gradient of a scalar node (typically the model's loss) with respect to a list of target nodes:
 
@@ -365,7 +337,8 @@ GoMLX currently supports computing the gradient of a scalar value (loss). It doe
 
 ## The `model.Store` and Scopes
 
-To build trainable models, you need a way to declare, retrieve, and update parameters (weights and biases) that persist across graph executions. The [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) is a hierarchical (tree-like) store for model parameters (represented by [Variable](file:///home/janpf/Projects/gomlx/gomlx/ml/model/variable.go)) and hyperparameters.
+To build trainable models, you need a way to declare, retrieve, and update variables (akak. "parameters" or "weights") that persist across graph executions. 
+The [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) is a hierarchical (tree-like) store for model parameters (represented by [Variable](file:///home/janpf/Projects/gomlx/gomlx/ml/model/variable.go)) and hyperparameters.
 
 It is important to understand the division of responsibilities here:
 * **`model.Store`**: This is the actual stateful container that physically stores the variable values (tensors representing weights and biases) and hyperparameters of your model in memory. It persists across multiple JIT compilations and graph executions.
