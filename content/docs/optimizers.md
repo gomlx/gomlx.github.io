@@ -52,6 +52,10 @@ type Interface interface {
 
 Because GoMLX variables are stateful and JIT-compiled, calling `UpdateGraph` registers the weight updates directly on the symbolic graph variables using `Variable.SetNodeValue`. 
 
+{{% callout type="note" %}}
+Usually, one passes the _root_ scope (`Store.RootScope`) to the optimizer. But in some unconventional scenario where more than one optimizer is being used, one can pass a sub-scope as well.
+{{% /callout %}}
+
 When the executor runs, it automatically materializes the updated weights and writes them back to the `model.Store` in-place. You do not need to extract variables or apply gradients manually.
 
 ### Custom Training Loop Example:
@@ -105,6 +109,11 @@ func main() {
 }
 ```
 
+{{% callout type="tip" %}}
+You can manually configure which variables are optimized by marking them as trainable (see `Variable.SetTrainable(trainable bool)`).
+This allows freezing arbitrary layers within your model.
+{{% /callout %}}
+
 ---
 
 ## Stochastic Gradient Descent (SGD)
@@ -153,3 +162,55 @@ Uses the maximum of past squared gradients instead of exponential decays, guaran
 Divides the learning rate by a running average of recent gradient magnitudes (RMS) without computing momentum (first moment).
 * **Paper**: Hinton's Coursera Lecture, and Graves' [Generating Sequences With Recurrent Neural Networks](https://arxiv.org/abs/1308.0850).
 * **Usage**: `optimizer.RMSProp().Done()`
+
+---
+
+## Cosine Learning Rate Schedule
+
+To improve convergence, neural networks are often trained using a learning rate schedule that decays the learning rate over time. A popular and effective option is **Cosine Annealing (with Warm Restarts)**.
+
+* **Paper**: [SGDR: Stochastic Gradient Descent with Warm Restarts](https://arxiv.org/abs/1608.03983) (Loshchilov & Hutter, 2016)
+
+In GoMLX, this schedule is implemented by the `cosineschedule` package. It dynamically mutates the learning rate variable in the model scope during graph compilation. Because both the schedule and the optimizer read from the same `learning_rate` variable, they integrate automatically.
+
+### Configuration
+You configure the schedule inside the model graph building function:
+
+```go
+import "github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
+
+func myModelGraph(scope *model.Scope, inputs []*Node) *Node {
+	g := inputs[0].Graph()
+
+	// Configure a cosine schedule with 100 warmup steps,
+	// decaying to a minimum learning rate of 0.0001,
+	// over one single decay cycle.
+	cosineschedule.New(scope, g, dtypes.Float32).
+		LearningRate(0.001).      // Initial peak learning rate
+		MinLearningRate(0.0001).  // Final minimum learning rate
+		WarmUpSteps(100).         // Linear warmup steps
+		NumCycles(1).             // 1 cycle over all training steps
+		Done()
+
+	// ... build your model layers ...
+}
+```
+
+Alternatively, you can configure it directly using hyperparameters in the `model.Store`:
+
+```go
+// In your training setup:
+store.SetParams(map[string]any{
+	optimizer.ParamLearningRate:         0.001,
+	cosineschedule.ParamMinLearningRate: 0.0001,
+	cosineschedule.ParamWarmUpSteps:     100,
+	cosineschedule.ParamCycles:          1, // Mutually exclusive with ParamPeriodSteps
+})
+
+// In your model graph builder:
+cosineschedule.New(scope, g, dtypes.Float32).FromScope().Done()
+```
+
+{{% callout type="tip" %}}
+It is simple to implement a custom training schedule, check the implementation of `cosineschedule` for an example of how it's done.
+{{% /callout %}}
