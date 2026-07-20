@@ -156,9 +156,15 @@ To train machine learning models, GoMLX computes gradients symbolically at graph
 grads := Gradient(scalarLoss, weightNode, biasNode)
 gradWeight, gradBias := grads[0], grads[1]
 ```
-
+{{< callout type="info" >}}
 * **Scalar Loss Requirement**: The first argument to `Gradient` must evaluate to a scalar (0D) shape. If your loss is a batch vector, collapse it first (e.g., using `ReduceAllSum` or `ReduceMean`).
 * **Limitations**: GoMLX currently supports first-order gradients. Direct computation of full Jacobians or Hessians is not supported out-of-the-box.
+{{< /callout >}}
+
+### Gradient Checkpointing (advanced)
+
+This can be used to minimize temporary memory usaged during training.
+See `Node.Checkpoint()` for documentation.
 
 ---
 
