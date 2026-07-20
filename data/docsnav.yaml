@@ -37,7 +37,7 @@
 
 - title: Ecosystem & Integrations
   pages:
-    - name: Go Huggingface
+    - name: go-huggingface
       url: docs/go-huggingface/
     - name: ONNX-GoMLX
       url: docs/onnx-gomlx/
