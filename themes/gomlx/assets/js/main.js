@@ -111,13 +111,7 @@
     });
   }
 
-  /* ── Keyboard search shortcut ── */
-  document.addEventListener('keydown', e => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      document.getElementById('search-trigger')?.focus();
-    }
-  });
+
 
   /* ── Smooth nav active state on scroll ── */
   const nav = document.getElementById('site-nav');

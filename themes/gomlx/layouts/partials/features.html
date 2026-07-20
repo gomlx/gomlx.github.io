@@ -5,46 +5,13 @@
 
     <div class="features-grid">
 
-      <div class="feature-card feature-card--large">
-        <div class="feature-icon feature-icon--blue">
-          {{ readFile "themes/gomlx/static/img/feature-openxla.svg" | safeHTML }}
-        </div>
-        <h3>XLA acceleration</h3>
-        <p>Compile your model graph once to XLA. The same Go code runs on CPU, NVIDIA GPU, and Google TPU without modification. Full JIT compilation, kernel fusion, and memory optimization built in.</p>
-        <a href="/docs/backends/" class="feature-link">Learn about backends →</a>
-      </div>
-
-      <div class="feature-card feature-card--large">
-        <div class="feature-icon feature-icon--green">
-          {{ readFile "themes/gomlx/static/img/feature-purego.svg" | safeHTML }}
-        </div>
-        <h3>Static typing, caught at compile time</h3>
-        <p>Go's type system catches shape mismatches before your first training step. No more cryptic runtime crashes three epochs into a run. Tensor shapes are first-class citizens.</p>
-        <a href="/docs/core-concepts/" class="feature-link">Explore the type system →</a>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-icon feature-icon--amber">
-          {{ readFile "themes/gomlx/static/img/feature-layers.svg" | safeHTML }}
-        </div>
-        <h3>Pure Go</h3>
-        <p>One <code>go get</code>, no virtual environments, no Python runtime, no version conflicts. Just idiomatic Go that your whole team already knows.</p>
-      </div>
-
       <div class="feature-card">
         <div class="feature-icon feature-icon--purple">
           {{ readFile "themes/gomlx/static/img/feature-notebooks.svg" | safeHTML }}
         </div>
         <h3>Rich layers API</h3>
-        <p>Dense, Conv, Attention, BatchNorm, Dropout, Embeddings — all in one package, composable, easy to extend with custom layers.</p>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-icon feature-icon--coral">
-          {{ readFile "themes/gomlx/static/img/feature-math.svg" | safeHTML }}
-        </div>
-        <h3>Live plotting</h3>
-        <p>Built-in Gonb/Jupyter integration plots training metrics in real time. Loss curves, accuracy, custom metrics — all without leaving Go.</p>
+        <p>Dense, Conv, Attention, BatchNorm, Dropout, Embeddings — all in one package, composable, easy to extend with
+          custom layers.</p>
       </div>
 
       <div class="feature-card">
@@ -52,7 +19,36 @@
           {{ readFile "themes/gomlx/static/img/feature-distributed.svg" | safeHTML }}
         </div>
         <h3>Modular design</h3>
-        <p>Swap backends, optimizers, and data pipelines independently. Use just the graph layer, or the full training stack — your choice.</p>
+        <p>Swap backends, optimizers, and data pipelines independently. Use just the graph layer, or the full training
+          stack — your choice.</p>
+      </div>
+
+      <div class="feature-card feature-card--large">
+        <div class="feature-icon feature-icon--blue">
+          {{ readFile "themes/gomlx/static/img/feature-openxla.svg" | safeHTML }}
+        </div>
+        <h3>XLA acceleration</h3>
+        <p>Compile your model graph once to XLA. The same Go code runs on CPU, NVIDIA GPU, and Google TPU without
+          modification. Full JIT compilation, kernel fusion, and memory optimization built in.</p>
+        <a href="/docs/backends/" class="feature-link">Learn about backends →</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon feature-icon--amber">
+          {{ readFile "themes/gomlx/static/img/feature-layers.svg" | safeHTML }}
+        </div>
+        <h3>Pure Go</h3>
+        <p>One <code>go get</code>, no virtual environments, no Python runtime, no version conflicts. Just idiomatic Go
+          that your whole team already knows.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon feature-icon--coral">
+          {{ readFile "themes/gomlx/static/img/feature-math.svg" | safeHTML }}
+        </div>
+        <h3>Live plotting</h3>
+        <p>Built-in Gonb/Jupyter integration plots training metrics in real time. Loss curves, accuracy, custom metrics
+          — all without leaving Go.</p>
       </div>
 
     </div>
