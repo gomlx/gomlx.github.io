@@ -467,7 +467,7 @@ ds, err := dataset.InMemoryFromData(backend, "image_pixels", []any{inputs}, []an
 if err != nil {
 	log.Fatalf("failed to create dataset: %v", err)
 }
-// Configure dataset to yield random batches of size 128 continuously (infinitely)
+// Configure dataset to yield random batches of size 512 continuously (infinitely)
 ds.BatchSize(512, false).Shuffle().Infinite(true)
 
 // 3. Define the neural network model function (MLP)
