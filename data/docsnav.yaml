@@ -44,11 +44,11 @@
 
 - title: Advanced & Support
   pages:
-    - name: Developing
-      url: docs/developing/
     - name: Debugging
       url: docs/debugging/
     - name: Error Handling
       url: docs/error-handling/
+    - name: Developing in GoMLX
+      url: docs/developing/
     - name: Changelog
       url: docs/changelog/
