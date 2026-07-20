@@ -894,17 +894,13 @@ func runGoProgram(mode, value, filePath string) ([]byte, error) {
 	cmd := exec.Command("go", "run", relPath)
 	cmd.Dir = repoPath
 
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
 	klog.V(1).Infof("Running command: go run %s (Dir: %s)", relPath, repoPath)
-	err = cmd.Run()
+	combined, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("go run failed: %v\nStderr: %s", err, stderr.String())
+		return nil, fmt.Errorf("go run failed: %v\nOutput:\n%s", err, string(combined))
 	}
 
-	return []byte(stdout.String()), nil
+	return combined, nil
 }
 
 // parseOutputSnippets parses stdout lines matching `md:<tag>` blocks.
