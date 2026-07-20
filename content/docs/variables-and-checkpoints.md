@@ -198,7 +198,7 @@ If you need to force variables to load immediately (for instance, when inspectin
 
 ### Inspecting and Modifying Checkpoints (`gomlx_checkpoints`)
 
-GoMLX includes a powerful command-line utility called `gomlx_checkpoints`, located in the [gomlx/cmd/gomlx_checkpoints/](file:///home/janpf/Projects/gomlx/gomlx/cmd/gomlx_checkpoints/) directory. You can install it locally to inspect, monitor, or modify checkpoint folders:
+GoMLX includes a powerful command-line utility called `gomlx_checkpoints`, located in the [gomlx/cmd/gomlx_checkpoints/](https://github.com/gomlx/gomlx/blob/main/cmd/gomlx_checkpoints/) directory. You can install it locally to inspect, monitor, or modify checkpoint folders:
 
 ```bash
 # Build and install the tool

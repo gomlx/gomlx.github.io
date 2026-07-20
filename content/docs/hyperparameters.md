@@ -51,7 +51,7 @@ func MyDenseLayer(scope *model.Scope, x *Node) *Node {
 
 In large-scale machine learning, managing dozens of command-line flags for tuning can become unwieldy. The recommended GoMLX approach maps hyperparameters directly to your `model.Store` and wraps them in a single `-set` flag.
 
-This pattern is demonstrated in the [UCI-Adult UCI demo trainer](file:///home/janpf/Projects/gomlx/gomlx/examples/adult/demo/main.go).
+This pattern is demonstrated in the [UCI-Adult UCI demo trainer](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go).
 
 ### Step 1: Define Your Default Store
 Create a helper function to initialize your `model.Store` and set default hyperparameters:

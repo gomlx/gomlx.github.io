@@ -2,7 +2,7 @@
 title: "Overview"
 section: "Get started"
 weight: 1
-source: "file:///home/janpf/Projects/gomlx/gomlx/README.md"
+source: "https://github.com/gomlx/gomlx/blob/main/README.md"
 ---
 
 <img align="right" src="/img/gomlx_gopher2.png" alt="GoMLX Gopher" width="220px"/>

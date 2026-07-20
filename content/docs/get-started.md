@@ -248,7 +248,7 @@ defined by their **shape** (`shapes.Shape`), which specifies the axes' dimension
 
 Every tensor has a shape (e.g. `(Float32)[2, 2]`), a list of dimension sizes, plus a `DType`. GoMLX checks shape compatibility at graph construction time, catching mismatches before any computation starts.
 
-You can construct [tensors.Tensor](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/tensor.go) objects from standard Go values (like multi-dimensional slices) using [FromValue](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/local.go#L799):
+You can construct [tensors.Tensor](https://github.com/gomlx/gomlx/blob/main/core/tensors/tensor.go) objects from standard Go values (like multi-dimensional slices) using [FromValue](https://github.com/gomlx/gomlx/blob/main/core/tensors/local.go#L799):
 
 <!-- sync_code: file=core-concepts/tensors/main.go tag=create -->
 ```go
@@ -271,7 +271,7 @@ Common dtypes include `dtypes.Float32`, `dtypes.Float64`, `dtypes.Int32`, `dtype
 
 ### Host vs. Device memory
 
-Behind the scenes, a [Tensor](file:///home/janpf/Projects/gomlx/gomlx/core/tensors/tensor.go) maintains synchronization between its memory representation in host RAM (local CPU) and accelerator device memory (GPU/TPU):
+Behind the scenes, a [Tensor](https://github.com/gomlx/gomlx/blob/main/core/tensors/tensor.go) maintains synchronization between its memory representation in host RAM (local CPU) and accelerator device memory (GPU/TPU):
 
 <!-- sync_code: file=core-concepts/tensors/main.go tag=sync -->
 ```go
@@ -338,7 +338,7 @@ GoMLX currently supports computing the gradient of a scalar value (loss). It doe
 ## The `model.Store` and Scopes
 
 To build trainable models, you need a way to declare, retrieve, and update variables (akak. "parameters" or "weights") that persist across graph executions. 
-The [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) is a hierarchical (tree-like) store for model parameters (represented by [Variable](file:///home/janpf/Projects/gomlx/gomlx/ml/model/variable.go)) and hyperparameters.
+The [Store](https://github.com/gomlx/gomlx/blob/main/ml/model/store.go#L33) is a hierarchical (tree-like) store for model parameters (represented by [Variable](https://github.com/gomlx/gomlx/blob/main/ml/model/variable.go)) and hyperparameters.
 
 It is important to understand the division of responsibilities here:
 * **`model.Store`**: This is the actual stateful container that physically stores the variable values (tensors representing weights and biases) and hyperparameters of your model in memory. It persists across multiple JIT compilations and graph executions.
@@ -346,7 +346,7 @@ It is important to understand the division of responsibilities here:
 
 ### Model Variables and Executors
 
-Instead of using the basic `graph.Exec`, neural network architectures use [Exec](file:///home/janpf/Projects/gomlx/gomlx/ml/model/exec.go). It is constructed with a [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) and automatically handles passing variables as extra inputs and outputs to the compiled graph.
+Instead of using the basic `graph.Exec`, neural network architectures use [Exec](https://github.com/gomlx/gomlx/blob/main/ml/model/exec.go). It is constructed with a [Store](https://github.com/gomlx/gomlx/blob/main/ml/model/store.go#L33) and automatically handles passing variables as extra inputs and outputs to the compiled graph.
 
 Here is a simple counter that increments a variable in the store on each step:
 
@@ -380,7 +380,7 @@ Inside the model function, `scope.VariableWithValue` retrieves or initializes th
 
 ### Scopes and Hierarchical Parameters
 
-A [Scope](file:///home/janpf/Projects/gomlx/gomlx/ml/model/scope.go) represents a path in the hierarchical store (similar to directories). When building complex model architectures, scopes allow you to separate variables of different layers.
+A [Scope](https://github.com/gomlx/gomlx/blob/main/ml/model/scope.go) represents a path in the hierarchical store (similar to directories). When building complex model architectures, scopes allow you to separate variables of different layers.
 
 Here is an example of defining a custom `denseLayer` function and applying it to different sub-scopes using `scope.In`:
 
@@ -437,7 +437,7 @@ Variable: /#rngState, shape: (Uint64)[3]
 
 ## Training a Model
 
-Training a model in GoMLX brings together all the building blocks: the backend, the [Store](file:///home/janpf/Projects/gomlx/gomlx/ml/model/store.go#L33) for tracking weights, [Dataset](file:///home/janpf/Projects/gomlx/gomlx/ml/dataset/inmemory.go) iteration, and the [Trainer](file:///home/janpf/Projects/gomlx/gomlx/ml/train/trainer.go#L169) / [Loop](file:///home/janpf/Projects/gomlx/gomlx/ml/train/loop.go).
+Training a model in GoMLX brings together all the building blocks: the backend, the [Store](https://github.com/gomlx/gomlx/blob/main/ml/model/store.go#L33) for tracking weights, [Dataset](https://github.com/gomlx/gomlx/blob/main/ml/dataset/inmemory.go) iteration, and the [Trainer](https://github.com/gomlx/gomlx/blob/main/ml/train/trainer.go#L169) / [Loop](https://github.com/gomlx/gomlx/blob/main/ml/train/loop.go).
 
 Here is a complete, working example that trains a small Multi-Layer Perceptron (MLP) to overfit (memorize) an image. The network learns a function $f(x, y) \to (r, g, b)$ that maps normalized pixel coordinates to the corresponding color at that location:
 
