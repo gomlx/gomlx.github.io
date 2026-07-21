@@ -2,13 +2,14 @@
 # Usage: make <target>
 
 HUGO        := hugo
-.PHONY: help dev build sync clean sync_docs sync_code
+.PHONY: help dev build sync clean sync_docs sync_code dev-docker
 
 help:
 	@echo ""
 	@echo "  GoMLX docs site commands:"
 	@echo ""
 	@echo "  make dev        — start local Hugo dev server (hot reload)"
+	@echo "  make dev-docker — same, but via Docker (no local Hugo install needed)"
 	@echo "  make build      — build production site to ./public/"
 	@echo "  make sync       — pull latest docs from gomlx/gomlx (latest release by default)"
 	@echo "                    Options:"
@@ -26,6 +27,9 @@ endif
 
 dev:
 	$(HUGO) server $(PORT_OPT) --disableFastRender --buildDrafts
+
+dev-docker:
+	docker compose up --build
 
 build:
 	$(HUGO)

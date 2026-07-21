@@ -24,4 +24,6 @@ make dev
 
 ## Contributing
 
-This site is a community contribution to GoMLX. If you find a documentation error or want to improve the site, feel free to open an issue or submit a pull request!
+This site is a community contribution to GoMLX. If you find a documentation error or want to improve
+the site, feel free to open an issue or submit a pull request! First time contributing? See
+[CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites, local setup, and PR guidelines.
