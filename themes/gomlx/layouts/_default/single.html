@@ -36,14 +36,24 @@
     {{ if .GitInfo }}
     <div class="last-updated">Last updated {{ .GitInfo.AuthorDate | time.Format "January 2, 2006" }}</div>
     {{ end }}
+    {{ $navPages := slice }}
+    {{ range hugo.Data.docsnav }}{{ range .pages }}{{ with site.GetPage .url }}{{ $navPages = $navPages | append . }}{{ end }}{{ end }}{{ end }}
+    {{ $curIdx := -1 }}
+    {{ range $i, $p := $navPages }}{{ if eq $p.RelPermalink $.RelPermalink }}{{ $curIdx = $i }}{{ end }}{{ end }}
+    {{ $prevPage := "" }}
+    {{ $nextPage := "" }}
+    {{ if ge $curIdx 0 }}
+    {{ if gt $curIdx 0 }}{{ $prevPage = index $navPages (sub $curIdx 1) }}{{ end }}
+    {{ if lt $curIdx (sub (len $navPages) 1) }}{{ $nextPage = index $navPages (add $curIdx 1) }}{{ end }}
+    {{ end }}
     <nav class="docs-pagination" aria-label="Page navigation">
-      {{ with .PrevInSection }}
+      {{ with $prevPage }}
       <a href="{{ .RelPermalink }}" class="pagination-card pagination-card--prev">
         <div class="dir">← Previous</div>
         <div class="title">{{ .Title }}</div>
       </a>
       {{ else }}<div></div>{{ end }}
-      {{ with .NextInSection }}
+      {{ with $nextPage }}
       <a href="{{ .RelPermalink }}" class="pagination-card pagination-card--next">
         <div class="dir">Next →</div>
         <div class="title">{{ .Title }}</div>
