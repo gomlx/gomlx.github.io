@@ -24,53 +24,55 @@
 <pre><code class="language-go"><span class="c">// Two-layer MLP on MNIST — full working example</span>
 <span class="kw">package</span> main
 
-<span class="kw">import</span> (
-    <span class="s">"github.com/gomlx/gomlx/graph"</span>
+<span class="kw">import (</span>
+    <span class="s">. "github.com/gomlx/gomlx/core/graph"</span>
     <span class="s">"github.com/gomlx/gomlx/ml/layers"</span>
-    <span class="s">"github.com/gomlx/gomlx/ml/train"</span>
-)
+    <span class="s">"github.com/gomlx/gomlx/ml/model"</span>
+<span class="kw">)</span>
 
 <span class="c">// modelGraph defines your model as a pure function.</span>
 <span class="c">// GoMLX traces it once, compiles to XLA, runs fast.</span>
-<span class="kw">func</span> <span class="fn">modelGraph</span>(ctx *context.Context, spec <span class="kw">any</span>, inputs []*graph.Node) []*graph.Node {
-    x := inputs[<span class="n">0</span>]                                  <span class="c">// [batch, 784]</span>
-    x  = layers.<span class="fn">Dense</span>(ctx.In(<span class="s">"hidden"</span>), x, <span class="kw">true</span>, <span class="n">128</span>) <span class="c">// → [batch, 128]</span>
-    x  = graph.<span class="fn">Relu</span>(x)
-    x  = layers.<span class="fn">Dense</span>(ctx.In(<span class="s">"output"</span>), x, <span class="kw">true</span>, <span class="n">10</span>)  <span class="c">// → [batch, 10]</span>
-    <span class="kw">return</span> []*graph.Node{x}
+<span class="kw">func</span> <span class="fn">modelGraph</span>(scope *model.Scope, inputs []*Node) *Node {
+    x := inputs[<span class="n">0</span>]                                     <span class="c">// [batch, 784]</span>
+    x  = layers.<span class="fn">Dense</span>(scope.<span class="fn">In</span>(<span class="s">"hidden"</span>), x, <span class="kw">true</span>, <span class="n">128</span>) <span class="c">// → [batch, 128]</span>
+    x  = <span class="fn">Relu</span>(x)
+    x  = layers.<span class="fn">Dense</span>(scope.<span class="fn">In</span>(<span class="s">"output"</span>), x, <span class="kw">true</span>, <span class="n">10</span>)  <span class="c">// → [batch, 10]</span>
+    <span class="kw">return</span> x
 }</code></pre>
         </div>
 
         <div class="code-panel" id="tab-train">
-<pre><code class="language-go"><span class="c">// Build a trainer with loss, optimizer, and eval callbacks</span>
-trainer := train.<span class="fn">NewTrainer</span>(manager, ctx, modelGraph,
-    losses.<span class="fn">SparseCategoricalCrossEntropyLogits</span>,
-    optimizers.<span class="fn">Adam</span>(),
-    train.<span class="fn">EveryNSteps</span>(<span class="n">100</span>, plotMetricsFn),
-    train.<span class="fn">NanLogger</span>(),
+<pre><code class="language-go"><span class="c">// Build a trainer with loss, optimizer, and metrics</span>
+trainer := train.<span class="fn">NewTrainer</span>(backend, store, modelGraph,
+    loss.<span class="fn">SparseCategoricalCrossentropyLogits</span>,
+    optimizer.<span class="fn">Adam</span>().<span class="fn">LearningRate</span>(<span class="n">0.001</span>).<span class="fn">Done</span>(),
+    []metric.Interface{metric.<span class="fn">NewMovingAverageSparseCategoricalLogitsAccuracy</span>(<span class="s">"acc"</span>, <span class="s">"acc"</span>)},
+    []metric.Interface{metric.<span class="fn">NewMeanSparseCategoricalLogitsAccuracy</span>(<span class="s">"acc"</span>, <span class="s">"acc"</span>)},
 )
 
 <span class="c">// Loop runs entirely on-device — no Python round-trips</span>
 loop := train.<span class="fn">NewLoop</span>(trainer)
+commandline.<span class="fn">AttachProgressBar</span>(loop) <span class="c">// Dynamic progress bar in CLI</span>
 loop.<span class="fn">RunSteps</span>(trainDS, <span class="n">10_000</span>)
 
 <span class="c">// Evaluate on test set</span>
-metrics := trainer.<span class="fn">Eval</span>(testDS)
-fmt.<span class="fn">Printf</span>(<span class="s">"Test accuracy: %.2f%%\n"</span>, metrics[<span class="s">"accuracy"</span>]*<span class="n">100</span>)</code></pre>
+metrics, _ := trainer.<span class="fn">Eval</span>(testDS)
+fmt.<span class="fn">Printf</span>(<span class="s">"Test accuracy: %s\n"</span>, metrics[<span class="n">0</span>].<span class="fn">PrettyPrint</span>())</code></pre>
         </div>
 
         <div class="code-panel" id="tab-graph">
 <pre><code class="language-go"><span class="c">// Graphs are compiled functions — define once, run anywhere</span>
-manager := backends.<span class="fn">New</span>() <span class="c">// auto-selects GPU > CPU</span>
+backend := compute.<span class="fn">MustNew</span>() <span class="c">// Auto-selects GPU > CPU</span>
 
-computeFn := graph.<span class="fn">Compile</span>(manager, <span class="kw">func</span>(g *graph.Graph) *graph.Node {
-    x := graph.<span class="fn">Parameter</span>(g, <span class="s">"x"</span>, shapes.<span class="fn">Make</span>(dtypes.Float32, <span class="n">3</span>))
-    w := graph.<span class="fn">Const</span>(g, []float32{<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>})
-    <span class="kw">return</span> graph.<span class="fn">ReduceSum</span>(graph.<span class="fn">Mul</span>(x, w), <span class="n">0</span>)
+computeFn := graph.<span class="fn">Compile</span>(backend, <span class="kw">func</span>(g *Graph) *Node {
+    x := <span class="fn">Parameter</span>(g, "x", shapes.<span class="fn">Make</span>(dtypes.Float32, <span class="n">3</span>))
+    w := <span class="fn">Const</span>(g, []float32{<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>})
+    <span class="kw">return</span> <span class="fn">ReduceSum</span>(<span class="fn">Mul</span>(x, w), <span class="n">0</span>)
 })
 
-result := computeFn.<span class="fn">Call</span>(xTensor)
-fmt.<span class="fn">Println</span>(result) <span class="c">// Tensor[float32: scalar] = 14</span></code></pre>
+<span class="c">// Execute compiled graph on input tensor</span>
+result := computeFn.<span class="fn">Call</span>(xTensor)[<span class="n">0</span>]
+fmt.<span class="fn">Println</span>(result.<span class="fn">Value</span>()) <span class="c">// Outputs: 14</span></code></pre>
         </div>
       </div>
     </div>

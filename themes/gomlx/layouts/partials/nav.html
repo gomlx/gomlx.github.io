@@ -17,11 +17,7 @@
     </ul>
 
     <div class="nav-actions">
-      <button class="nav-search-trigger" id="search-trigger" aria-label="Search">
-        {{ readFile "themes/gomlx/static/img/search.svg" | safeHTML }}
-        <span>Search</span>
-        <kbd>⌘K</kbd>
-      </button>
+
 
       <a href="{{ .Site.Params.github }}" class="nav-github" target="_blank" rel="noopener" aria-label="GitHub" style="display: inline-flex; align-items: center; text-decoration: none;">
         {{ readFile "themes/gomlx/static/img/github.svg" | safeHTML }}
@@ -63,14 +59,12 @@
         }
       }).catch(err => console.debug('Could not fetch repo stats:', err));
 
-    // Fetch Latest Release Version
+    // Fetch Latest Release Version for community strip
     fetch(repoUrl + '/releases/latest')
       .then(res => res.json())
       .then(data => {
         if (data.tag_name) {
-          const navVersion = document.getElementById('gomlx-version');
           const stripVersion = document.getElementById('strip-gomlx-version');
-          if (navVersion) navVersion.textContent = data.tag_name;
           if (stripVersion) stripVersion.textContent = data.tag_name;
         }
       }).catch(err => console.debug('Could not fetch latest release:', err));

@@ -5,12 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -29,12 +30,12 @@ const repoFullName = repoOwner + "/" + repoName
 func main() {
 	mode, ref, err := parseFlags()
 	if err != nil {
-		log.Fatalf("Error parsing flags: %v", err)
+		klog.Fatalf("Error parsing flags: %v", err)
 	}
 
 	hugoTomlPath, err := findHugoToml()
 	if err != nil {
-		log.Fatalf("Could not locate hugo.toml: %v", err)
+		klog.Fatalf("Could not locate hugo.toml: %v", err)
 	}
 	baseDir := filepath.Dir(hugoTomlPath)
 	outDir := filepath.Join(baseDir, "content", "docs")
@@ -42,10 +43,10 @@ func main() {
 	// If mode is a remote ref and version="latest", resolve it.
 	displayVersion := ref
 	if mode == "version" && ref == "latest" {
-		log.Println("Fetching latest release tag from GitHub...")
+		klog.V(1).Info("Fetching latest release tag from GitHub...")
 		latest, err := fetchLatestReleaseTag()
 		if err != nil {
-			log.Fatalf("Failed to fetch latest release: %v", err)
+			klog.Fatalf("Failed to fetch latest release: %v", err)
 		}
 		ref = latest
 		displayVersion = latest
@@ -53,48 +54,49 @@ func main() {
 		displayVersion = "local"
 	}
 
-	log.Printf("Updating hugo.toml with version: %s", displayVersion)
+	klog.V(1).Infof("Updating hugo.toml with version: %s", displayVersion)
 	if err := updateHugoToml(hugoTomlPath, displayVersion); err != nil {
-		log.Fatalf("Failed to update hugo.toml: %v", err)
+		klog.Fatalf("Failed to update hugo.toml: %v", err)
 	}
 
-	log.Printf("Fetching file list (mode: %s, ref/path: %s)...", mode, ref)
-	files, err := getDocsFiles(mode, ref)
-	if err != nil {
-		log.Fatalf("Failed to get file list: %v", err)
-	}
+	// Only synchronize CHANGELOG.md (which generates changelog.md)
+	files := []string{"CHANGELOG.md"}
 
 	if err := os.MkdirAll(outDir, 0755); err != nil {
-		log.Fatalf("Failed to create output dir: %v", err)
+		klog.Fatalf("Failed to create output dir: %v", err)
 	}
 
 	weight := 10
+	var changedCount int
+
 	for _, fname := range files {
-		log.Printf("Processing %s...", fname)
+		klog.V(1).Infof("Processing %s...", fname)
 		content, err := getFileContent(mode, ref, "docs/"+fname)
 		if err != nil {
-			log.Fatalf("Failed to read file %s: %v", fname, err)
+			klog.Fatalf("Failed to read file %s: %v", fname, err)
 		}
 
 		sourceURL := getSourceURL(mode, ref, "docs/"+fname)
-		if err := processFile(fname, string(content), weight, sourceURL, outDir); err != nil {
-			log.Fatalf("Failed to process file %s: %v", fname, err)
+		changed, err := processFile(fname, string(content), weight, sourceURL, outDir)
+		if err != nil {
+			klog.Fatalf("Failed to process file %s: %v", fname, err)
+		}
+		if changed {
+			relPath, err := filepath.Rel(baseDir, filepath.Join(outDir, generateSlug(fname)+".md"))
+			if err != nil {
+				relPath = filepath.Join(outDir, generateSlug(fname)+".md")
+			}
+			fmt.Printf("✅ Updated %s\n", relPath)
+			changedCount++
 		}
 		weight += 10
 	}
 
-	log.Println("Fetching and processing overview (README.md)...")
-	readmeContent, err := getFileContent(mode, ref, "README.md")
-	if err != nil {
-		log.Fatalf("Failed to read README.md: %v", err)
+	if changedCount == 0 {
+		fmt.Println("✅  No updates found.")
 	}
 
-	readmeSource := getSourceURL(mode, ref, "README.md")
-	if err := processOverview(string(readmeContent), readmeSource, outDir); err != nil {
-		log.Fatalf("Failed to process overview: %v", err)
-	}
-
-	log.Printf("Sync complete. %d doc files written to %s", len(files)+1, outDir)
+	klog.V(1).Infof("Sync complete. %d doc files written to %s", len(files), outDir)
 }
 
 // --- Helpers: Configuration & State ---
@@ -160,7 +162,7 @@ func doRequest(reqURL string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Support GITHUB_TOKEN to bypass rate limits
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -313,7 +315,7 @@ func stripH1(content string) string {
 	return content
 }
 
-func processFile(filename, content string, weight int, sourceURL, outDir string) error {
+func processFile(filename, content string, weight int, sourceURL, outDir string) (bool, error) {
 	slug := generateSlug(filename)
 	title := deriveTitle(filename)
 	section := deriveSection(slug)
@@ -328,11 +330,22 @@ source: "%s"
 
 `, title, section, weight, sourceURL)
 
+	newContent := []byte(frontmatter + body)
 	outPath := filepath.Join(outDir, slug+".md")
-	return os.WriteFile(outPath, []byte(frontmatter+body), 0644)
+
+	existing, err := os.ReadFile(outPath)
+	if err == nil && string(existing) == string(newContent) {
+		return false, nil
+	}
+
+	err = os.WriteFile(outPath, newContent, 0644)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
-func processOverview(content string, sourceURL, outDir string) error {
+func processOverview(content string, sourceURL, outDir string) (bool, error) {
 	lines := strings.Split(content, "\n")
 	if len(lines) > 120 {
 		lines = lines[:120]
@@ -351,6 +364,17 @@ source: "%s"
 > This page is excerpted from the [full README](https://github.com/%s). For complete documentation, browse the sections in the sidebar.
 `, sourceURL, intro, repoFullName)
 
+	newContent := []byte(frontmatter)
 	outPath := filepath.Join(outDir, "overview.md")
-	return os.WriteFile(outPath, []byte(frontmatter), 0644)
+
+	existing, err := os.ReadFile(outPath)
+	if err == nil && string(existing) == string(newContent) {
+		return false, nil
+	}
+
+	err = os.WriteFile(outPath, newContent, 0644)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

@@ -111,13 +111,7 @@
     });
   }
 
-  /* ── Keyboard search shortcut ── */
-  document.addEventListener('keydown', e => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      document.getElementById('search-trigger')?.focus();
-    }
-  });
+
 
   /* ── Smooth nav active state on scroll ── */
   const nav = document.getElementById('site-nav');
@@ -125,19 +119,6 @@
     window.addEventListener('scroll', () => {
       nav.classList.toggle('is-scrolled', window.scrollY > 8);
     }, { passive: true });
-  }
-
-  /* ── Dynamic version fetch (fallback if not rebuilt recently) ── */
-  const versionSpan = document.getElementById('gomlx-version');
-  if (versionSpan) {
-    fetch('https://api.github.com/repos/gomlx/gomlx/releases/latest')
-      .then(res => res.json())
-      .then(data => {
-        if (data.tag_name) {
-          versionSpan.textContent = data.tag_name;
-        }
-      })
-      .catch(err => console.debug('Could not fetch latest GoMLX version:', err));
   }
 
 })();

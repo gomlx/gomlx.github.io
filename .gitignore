@@ -13,6 +13,9 @@ hugo_stats.json
 *.swp
 *.core
 
+# Agents
+GEMINI.md
+
 # Dependency directories (if using npm for Tailwind/PostCSS later)
 node_modules/
 package-lock.json

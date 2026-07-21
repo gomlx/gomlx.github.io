@@ -1,5 +1,4 @@
-baseURL = "/"
-languageCode = "en-us"
+locale = "en-us"
 title = "GoMLX — Machine Learning for Go"
 theme = "gomlx"
 enableGitInfo = true
@@ -13,10 +12,15 @@ enableRobotsTXT = true
     guessSyntax = true
   [markup.goldmark.renderer]
     unsafe = true
+  [markup.goldmark.extensions.passthrough]
+    enable = true
+    [markup.goldmark.extensions.passthrough.delimiters]
+      block = [["$$", "$$"], ["\\[", "\\]"]]
+      inline = [["$", "$"], ["\\(", "\\)"]]
 
 [params]
   description = "An easy-to-use ML and math framework for Go. No Python. Like PyTorch, Jax, or TensorFlow for Go."
-  version = "v0.27.3"
+  version = "v0.28.x"
   github = "https://github.com/gomlx/gomlx"
   slack = "https://app.slack.com/client/T029RQSE6/C08TX33BX6U"
   accent = "#0FA878"
@@ -24,11 +28,11 @@ enableRobotsTXT = true
 [menu]
   [[menu.main]]
     name = "Get Started"
-    url = "/docs/installation/"
+    url = "/docs/get-started/"
     weight = 1
   [[menu.main]]
     name = "Docs"
-    url = "/docs/"
+    url = "/docs/overview/"
     weight = 2
   [[menu.main]]
     name = "Examples"
