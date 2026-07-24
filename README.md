@@ -1,6 +1,5 @@
 # [gomlx.github.io -GoMLX Documentation Site](https://gomlx.github.io)
 
-🚧 **Experimental/Under-Construction**:
 The official documentation website for [GoMLX](https://github.com/gomlx/gomlx) — an accelerated machine learning and math framework for Go.
 
 The documentation site is built using [Hugo](https://gohugo.io).
