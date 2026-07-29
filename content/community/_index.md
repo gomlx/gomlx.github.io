@@ -35,4 +35,11 @@ We love connecting with the community! Whether you need help, have an idea, or w
     <h3>Google Groups</h3>
     <p>Join our mailing list at <strong>gomlx-discuss</strong> for email updates and discussions.</p>
   </a>
+
+  <a href="/docs/sponsor/" class="community-card">
+    <img src="../img/gopher_sponsorship.jpeg" alt="Sponsor icon" style="border-radius: 6px; object-fit: cover;">
+    <h3>Sponsor / Donate</h3>
+    <p>Support open-source AI development in Go by sponsoring GoMLX.</p>
+  </a>
 </div>
+

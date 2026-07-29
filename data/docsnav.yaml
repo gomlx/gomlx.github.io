@@ -42,7 +42,7 @@
     - name: ONNX-GoMLX
       url: docs/onnx-gomlx/
 
-- title: Advanced & Support
+- title: Advanced
   pages:
     - name: Debugging
       url: docs/debugging/
@@ -52,3 +52,10 @@
       url: docs/developing/
     - name: Changelog
       url: docs/changelog/
+
+- title: Community & Support
+  pages:
+    - name: Sponsor GoMLX
+      url: docs/sponsor/
+
+

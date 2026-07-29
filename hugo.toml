@@ -42,6 +42,11 @@ enableRobotsTXT = true
     name = "Community"
     url = "/community/"
     weight = 4
+  [[menu.main]]
+    name = "♥ Sponsor"
+    url = "/docs/sponsor/"
+    weight = 5
+
 
 [outputs]
   home = ["HTML", "RSS"]
