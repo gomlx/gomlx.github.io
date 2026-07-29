@@ -6,6 +6,8 @@
       url: docs/installation/
     - name: Get Started
       url: docs/get-started/
+    - name: First Model
+      url: docs/first-model/
 
 - title: Core Guides
   pages:
