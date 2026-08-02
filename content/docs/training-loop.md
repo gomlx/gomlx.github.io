@@ -4,7 +4,7 @@ section: "Training & Layers"
 weight: 20
 ---
 
-<img align="right" src="/img/gopher_training.jpg" alt="GoMLX Gopher" width="220px"/>
+<img align="right" src="/img/gomlx_animation.apng" alt="GoMLX Training Animation" width="220px"/>
 
 In GoMLX, the training process is orchestrated by two primary objects:
 
@@ -75,6 +75,8 @@ trainer := train.NewTrainer(
 ---
 
 ## The Training Loop (`train.Loop`)
+
+<img align="right" src="/img/gopher_training.jpg" alt="GoMLX Gopher" width="220px"/>
 
 To run the trainer over a dataset, you wrap it in a `train.Loop` object:
 
