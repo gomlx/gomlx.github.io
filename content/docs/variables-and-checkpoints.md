@@ -33,7 +33,7 @@ graph LR
             Dir2 --> Leaf4((layernorm))
         end
         subgraph Scope[model.Scope]
-            Ptr("/layer_1/attention")
+            Ptr("/layer_2/attention")
         end
     end
 
