@@ -136,6 +136,26 @@ Uses [ONNX Runtime](https://onnxruntime.ai/) (ORT) to execute GoMLX computation 
 * **Cons**: Requires CGO/C++ dependencies for ONNX Runtime. Currently supports Linux/amd64 and Windows/amd64.
 * **Importing**: Included in `github.com/gomlx/gomlx/backends/default` when building with `-tags=onnx`. Alternatively, import `github.com/gomlx/compute-onnx` directly.
 
+Configuration options (via `GOMLX_BACKEND=onnx:<options>`):
+
+- **`cpu`**: Forces CPU execution.
+- **`cuda`** (or **`gpu`**): Forces CUDA GPU execution via the ONNX Runtime CUDA Execution Provider.
+- **`log=<level>`**: Sets internal logging severity level (0=Error, 1=Warning, 2=Info, 3=Verbose).
+- **Default (empty)**: Auto-detects if an NVIDIA GPU is available and defaults to CUDA if present, falling back to CPU.
+
+Example: `GOMLX_BACKEND="onnx:cuda,log=2"`
+
+#### ONNX Runtime Auto-Installation
+The ONNX Runtime backend includes an auto-installer. At startup, if the ONNX Runtime shared library (`libonnxruntime.so` on Linux, `libonnxruntime.dylib` on macOS, `onnxruntime.dll` on Windows) is not found, it automatically downloads and extracts the official ONNX Runtime binaries locally into:
+* **Linux**: `~/.local/lib/onnxruntime/`
+* **macOS**: `~/Library/Application Support/onnxruntime/`
+* **Windows**: `~\AppData\Local\onnxruntime\`
+
+#### Custom Library Path & Disabling Auto-Installation
+* **Custom Library Path**: Specify an explicit shared library location by setting the `ONNXRUNTIME_SHARED_LIBRARY_PATH` environment variable.
+* **Disabling Auto-Installation**: Set environment variable `GOMLX_NO_AUTO_INSTALL=1` to prevent automatic downloads (ideal for offline environments or production Docker builds).
+* **Standalone Installer Utility**: You can pre-install libraries using the CLI tool in `github.com/gomlx/compute-onnx/cmd/onnxruntime_installer`.
+
 #### Exporting / Saving Models to `.onnx` Format
 
 With the `onnx` backend enabled, you can save trained GoMLX models to standard `.onnx` files. These files can then be loaded and executed with ONNX Runtime in GoMLX or deployed in other languages and inference engines.
