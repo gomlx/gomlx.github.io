@@ -2,10 +2,44 @@
 title: "CHANGELOG"
 section: "Guides"
 weight: 10
-source: "https://github.com/gomlx/gomlx/blob/main/docs/CHANGELOG.md"
+source: "file:///home/janpf/Projects/gomlx/gomlx/docs/CHANGELOG.md"
 ---
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
+
+- 2026-08-16:
+  - Updated `gomlx_checkpoints -plot` to use VizB (https://github.com/goptics/vizb) to plot metrics. With the removal
+    of Go dependencies, now it is no longer in its own sub-module (removed the corresponding `go.mod` file).
+    (Thx @mayura-andrew!)
+
+- 2026-08-02:
+  - Added graph.DynamicReshape and graph.DynamicReshapeLike -- they fallback to Reshape if the shapes (input and target) are static.
+  - Added graph.Graph.UniqueName, to allow easy creation of unique axes names.
+  - Fixed some ops to handle dynamic shapes (using DynamicReshape)
+  - Added -save_onnx flag to `./examples/adult/demo` using dynamic batch size.
+
+- 2026-07-30:
+  - Added experimental "onnx" backend procted by `-tags=onnx` tag.
+  - New `ml/model/onnx` package:
+    - `Save(backend, exec, w, inputShapes, inputNames, outputNames)`: saves to a `.onnnx` model. Only works with "onnx" backend.
+    - `SaveToFile(backend, exec, filePath, inputShapes, inputNames, outputNames)`: version to save to file.
+    - `Load(backend, r) & LoadFromFile(backend, filePath)`: Loads an ONNX model from a reader/filepath into an onnx.Executable.
+    - `(*Executable).Call(inputs...)`: Converts input arguments to `*tensors.Tensor` / `compute.Buffer`, executes the loaded ONNX graph, and converts output buffers back into `[]*tensors.Tensor`.
+
+- 2026-07-29:
+  - Added another test for `Exec` with dynamic shapes.
+  - Added `Exec.Compile(shapes)` to build and compile graphs for the given shape.
+  - Removed `Exec.PreCompile` -- no longer needed.
+  - Added `Store.WithVariableAsConst(enabled bool)`.
+  - Added `Store.CreateVariable` (and corresponding `Scope.CreateVariable`).
+
+- 2026-07-28:
+  - Updated `Backend.FusedDense` to take a `compute.DenseConfig` options parameter, which now includes layout information of the weights.
+  - Renamed `compute.AxesLayout` -> `compute.AttentionAxesLayout` (since it's for attention only).
+  - `nn.Dense`: update to use `compute.DenseConfig` options parameter, and accept `compute.DenseLayout` for weights layout.
+  - Exposed `DenseLayout` configuration in `layers.DenseWithLayout` and `fnn.Config.WithWeightsLayout()`.
+  - Updated `transformer` and `attention` packages to make use of the `DenseLayout` configuration when requested.
+  - Added `Graph.Executable()` to return the corresponding backend `Executable` object.
 
 ---
 
