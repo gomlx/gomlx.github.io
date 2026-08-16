@@ -59,7 +59,28 @@ func main() {
 		klog.Fatalf("Failed to update hugo.toml: %v", err)
 	}
 
-	// Only synchronize CHANGELOG.md (which generates changelog.md)
+	// 1. Synchronize overview.md from README.md
+	klog.V(1).Info("Processing README.md for overview.md...")
+	readmeContent, err := getFileContent(mode, ref, "README.md")
+	if err != nil {
+		klog.Fatalf("Failed to read README.md: %v", err)
+	}
+	readmeSourceURL := getSourceURL(mode, ref, "README.md")
+	var changedCount int
+	overviewChanged, err := processOverview(string(readmeContent), readmeSourceURL, outDir)
+	if err != nil {
+		klog.Fatalf("Failed to process overview.md: %v", err)
+	}
+	if overviewChanged {
+		relPath, err := filepath.Rel(baseDir, filepath.Join(outDir, "overview.md"))
+		if err != nil {
+			relPath = filepath.Join(outDir, "overview.md")
+		}
+		fmt.Printf("✅ Updated %s\n", relPath)
+		changedCount++
+	}
+
+	// 2. Synchronize CHANGELOG.md (which generates changelog.md)
 	files := []string{"CHANGELOG.md"}
 
 	if err := os.MkdirAll(outDir, 0755); err != nil {
@@ -67,7 +88,6 @@ func main() {
 	}
 
 	weight := 10
-	var changedCount int
 
 	for _, fname := range files {
 		klog.V(1).Infof("Processing %s...", fname)
@@ -96,7 +116,7 @@ func main() {
 		fmt.Println("✅  No updates found.")
 	}
 
-	klog.V(1).Infof("Sync complete. %d doc files written to %s", len(files), outDir)
+	klog.V(1).Infof("Sync complete. %d doc files written to %s", len(files)+1, outDir)
 }
 
 // --- Helpers: Configuration & State ---
@@ -345,15 +365,77 @@ source: "%s"
 	return true, nil
 }
 
-func processOverview(content string, sourceURL, outDir string) (bool, error) {
+func extractAboutSection(content string) string {
 	lines := strings.Split(content, "\n")
-	if len(lines) > 120 {
-		lines = lines[:120]
+	var aboutLines []string
+	inAbout := false
+	inTipBlock := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			if inAbout {
+				// Reached next section
+				break
+			}
+			if strings.Contains(strings.ToLower(trimmed), "about") {
+				inAbout = true
+				continue
+			}
+		}
+
+		if inAbout {
+			if strings.HasPrefix(trimmed, "> [!") {
+				inTipBlock = true
+				continue
+			}
+			if inTipBlock {
+				if strings.HasPrefix(trimmed, ">") {
+					continue
+				}
+				inTipBlock = false
+			}
+
+			// Replace relative doc image path with hugo /img/ path
+			line = strings.ReplaceAll(line, `src="docs/`, `src="/img/`)
+			aboutLines = append(aboutLines, line)
+		}
 	}
-	intro := strings.Join(lines, "\n")
+	return strings.TrimSpace(strings.Join(aboutLines, "\n"))
+}
+
+func extractHighlightsSection(content string) string {
+	lines := strings.Split(content, "\n")
+	var highlightLines []string
+	inHighlights := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "### Highlights") || strings.HasPrefix(trimmed, "## Highlights") {
+			inHighlights = true
+			highlightLines = append(highlightLines, "## Highlights")
+			continue
+		}
+		if inHighlights {
+			if strings.HasPrefix(trimmed, "## ") {
+				// Reached next section
+				break
+			}
+			if trimmed == "Some selected highlights:" {
+				continue
+			}
+			highlightLines = append(highlightLines, line)
+		}
+	}
+	return strings.TrimSpace(strings.Join(highlightLines, "\n"))
+}
+
+func processOverview(content string, sourceURL, outDir string) (bool, error) {
+	about := extractAboutSection(content)
+	highlights := extractHighlightsSection(content)
 
 	frontmatter := fmt.Sprintf(`---
-title: "What is GoMLX?"
+title: "Overview"
 section: "Get started"
 weight: 1
 source: "%s"
@@ -361,8 +443,8 @@ source: "%s"
 
 %s
 
-> This page is excerpted from the [full README](https://github.com/%s). For complete documentation, browse the sections in the sidebar.
-`, sourceURL, intro, repoFullName)
+%s
+`, sourceURL, about, highlights)
 
 	newContent := []byte(frontmatter)
 	outPath := filepath.Join(outDir, "overview.md")
@@ -378,3 +460,4 @@ source: "%s"
 	}
 	return true, nil
 }
+
