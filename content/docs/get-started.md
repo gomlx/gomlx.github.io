@@ -134,6 +134,7 @@ The following backends are implemented so far:
   used in websites).
 - **"xla"** (or `"xla:cpu"`, `"xla:cuda"`, `"xla:tpu"`; use `"xla:help"` for an error with its options): uses [Google's XLA](https://openxla.org/), the same backend used by
  TensorFlow, Jax and optionally by PyTorch.
+- **"onnx"**: uses [ONNX Runtime](https://onnxruntime.ai/) to execute GoMLX graphs (Linux/Windows amd64; included by `backends/default` when built with `-tags=onnx`, or by importing `github.com/gomlx/compute-onnx` directly). Also supports saving models to `.onnx` files.
 - [**go-darwinml**](https://github.com/gomlx/go-darwinml): (**experimental, in development**) it provides
   the `CoreML` (ANE, GPU, CPU) and the `MPSGraph` (GPU/Metal) backends.
 

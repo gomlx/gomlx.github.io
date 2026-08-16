@@ -27,6 +27,7 @@ Example `config` (or `GOMLX_BACKEND`) values:
   * `go`: Forces the pure Go backend.
   * `xla`: Uses the XLA backend. It will attempt to use one of TPU, CUDA (Nvidia GPU), or CPU in that order.
     You can also specify which XLA plugin to use explicitly: E.g.: `xla:cpu`, `xla:cuda`.
+  * `onnx`: Uses the ONNX Runtime backend (included by `backends/default` when built with `-tags=onnx`, or by importing `github.com/gomlx/compute-onnx`).
 
 See below for specific backend configurations.
 
@@ -124,6 +125,29 @@ our slack channel for questions.
 *(Experimental)* Implements bindings to Apple’s native CoreML and Metal Performance Shaders (MPSGraph) runtimes.
 
 * **Pros**: Leverages Apple Silicon's Apple Neural Engine (ANE) and unified memory GPU (Metal) on Macs.
+
+
+---
+
+### 4. The ONNX Runtime Backend (`"onnx"`)
+Uses [ONNX Runtime](https://onnxruntime.ai/) (ORT) to execute GoMLX computation graphs on Linux and Windows (amd64). Implemented in package [`github.com/gomlx/compute-onnx`](https://github.com/gomlx/compute-onnx).
+
+* **Pros**: Interoperability with the ONNX ecosystem, ability to execute ONNX models, and support for exporting trained GoMLX models to the standard `.onnx` file format.
+* **Cons**: Requires CGO/C++ dependencies for ONNX Runtime. Currently supports Linux/amd64 and Windows/amd64.
+* **Importing**: Included in `github.com/gomlx/gomlx/backends/default` when building with `-tags=onnx`. Alternatively, import `github.com/gomlx/compute-onnx` directly.
+
+#### Exporting / Saving Models to `.onnx` Format
+
+With the `onnx` backend enabled, you can save trained GoMLX models to standard `.onnx` files. These files can then be loaded and executed with ONNX Runtime in GoMLX or deployed in other languages and inference engines.
+
+* **Package**: [`github.com/gomlx/gomlx/ml/model/onnx`](https://pkg.go.dev/github.com/gomlx/gomlx/ml/model/onnx) (protected by build tag `//go:build onnx`).
+* **Key Functions**:
+  * `onnx.SaveToFile(backend, exec, filePath, inputShapes, inputNames, outputNames)`: Exports the computation graph and model parameters to an `.onnx` file.
+  * `onnx.Save(backend, exec, writer, inputShapes, inputNames, outputNames)`: Exports the ONNX model to an `io.Writer`.
+  * `onnx.LoadFromFile(backend, filePath)` / `onnx.Load(backend, reader)`: Loads an `.onnx` model into an executable for inference within GoMLX.
+  * `onnx.IsONNX(backend)`: Returns `true` if the provided `compute.Backend` is an ONNX backend instance (`*onnxbackend.Backend`).
+* **Dynamic Axes**: Supports dynamic input dimensions (such as variable batch sizes) using `exec.WithDynamicAxes(...)` and `shapes.MakeDynamic(...)`.
+* **Example**: See the [`save_onnx.go`](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/save_onnx.go) demo in the UCI-Adult example (build with `-tags=onnx`).
 
 
 ---
