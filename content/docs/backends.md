@@ -156,6 +156,9 @@ The ONNX Runtime backend includes an auto-installer. At startup, if the ONNX Run
 * **Disabling Auto-Installation**: Set environment variable `GOMLX_NO_AUTO_INSTALL=1` to prevent automatic downloads (ideal for offline environments or production Docker builds).
 * **Standalone Installer Utility**: You can pre-install libraries using the CLI tool in `github.com/gomlx/compute-onnx/cmd/onnxruntime_installer`.
 
+#### Debugging & Saving Models on Compilation Failure
+* **Save Model on Failure**: If graph compilation or session creation fails, set environment variable `GOMLX_ONNX_SAVE_ON_FAILURE=/path/to/failed_model.onnx`. When set, the backend will write the serialized ONNX model protobuf to that file path for inspection and print a `klog` notification.
+
 #### Exporting / Saving Models to `.onnx` Format
 
 With the `onnx` backend enabled, you can save trained GoMLX models to standard `.onnx` files. These files can then be loaded and executed with ONNX Runtime in GoMLX or deployed in other languages and inference engines.
