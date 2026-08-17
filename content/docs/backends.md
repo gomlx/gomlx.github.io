@@ -140,10 +140,11 @@ Configuration options (via `GOMLX_BACKEND=onnx:<options>`):
 
 - **`cpu`**: Forces CPU execution.
 - **`cuda`** (or **`gpu`**): Forces CUDA GPU execution via the ONNX Runtime CUDA Execution Provider.
+- **`<path/to/libonnxruntime.so>`**: Explicit path to the ONNX Runtime shared library binary (`.so`, `.dylib`, or `.dll`), bypassing `ONNXRUNTIME_SHARED_LIBRARY_PATH`.
 - **`log=<level>`**: Sets internal logging severity level (0=Error, 1=Warning, 2=Info, 3=Verbose).
 - **Default (empty)**: Auto-detects if an NVIDIA GPU is available and defaults to CUDA if present, falling back to CPU.
 
-Example: `GOMLX_BACKEND="onnx:cuda,log=2"`
+Example: `GOMLX_BACKEND="onnx:cuda,log=2"` or `GOMLX_BACKEND="onnx:/path/to/libonnxruntime.so"`
 
 #### ONNX Runtime Auto-Installation
 The ONNX Runtime backend includes an auto-installer. At startup, if the ONNX Runtime shared library (`libonnxruntime.so` on Linux, `libonnxruntime.dylib` on macOS, `onnxruntime.dll` on Windows) is not found, it automatically downloads and extracts the official ONNX Runtime binaries locally into:
@@ -152,8 +153,8 @@ The ONNX Runtime backend includes an auto-installer. At startup, if the ONNX Run
 * **Windows**: `~\AppData\Local\onnxruntime\`
 
 #### Custom Library Path & Disabling Auto-Installation
-* **Custom Library Path**: Specify an explicit shared library location by setting the `ONNXRUNTIME_SHARED_LIBRARY_PATH` environment variable.
-* **Disabling Auto-Installation**: Set environment variable `GOMLX_NO_AUTO_INSTALL=1` to prevent automatic downloads (ideal for offline environments or production Docker builds).
+* **Custom Library Path**: Specify an explicit shared library location by passing a path in the configuration string (e.g. `GOMLX_BACKEND=onnx:/path/to/libonnxruntime.so`, which bypasses `ONNXRUNTIME_SHARED_LIBRARY_PATH`), or by setting the `ONNXRUNTIME_SHARED_LIBRARY_PATH` environment variable.
+* **Disabling Auto-Installation**: Set environment variable `GOMLX_NO_AUTO_INSTALL=1` or call `onnxbackend.EnableAutoInstall(false)` programmatically before initializing the backend to prevent automatic downloads (ideal for offline environments or production Docker builds).
 * **Standalone Installer Utility**: You can pre-install libraries using the CLI tool in `github.com/gomlx/compute-onnx/cmd/onnxruntime_installer`.
 
 #### Debugging & Saving Models on Compilation Failure
