@@ -172,6 +172,15 @@ With the `onnx` backend enabled, you can save trained GoMLX models to standard `
 * **Dynamic Axes**: Supports dynamic input dimensions (such as variable batch sizes) using `exec.WithDynamicAxes(...)` and `shapes.MakeDynamic(...)`.
 * **Example**: See the [`save_onnx.go`](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/save_onnx.go) demo in the UCI-Adult example (build with `-tags=onnx`).
 
+#### Inspecting & Visualizing `.onnx` Files
+
+* **CLI Printer (`onnx_printer`)**: To inspect the contents, shapes, initializers, and operations of a `.onnx` model file directly in the terminal, use the `onnx_printer` utility in `github.com/gomlx/compute-onnx/cmd/onnx_printer`:
+  ```bash
+  go run github.com/gomlx/compute-onnx/cmd/onnx_printer path/to/model.onnx
+  ```
+  It formats tensor shapes using GoMLX `shapes.Shape` (including dynamic dimension names), prints operations on a single line per op, and truncates large constant tensors (use `-max_items` or `-n` to control element limit).
+* **Graphical Visualization**: For interactive graphical diagram visualization of ONNX computation graphs, open your `.onnx` model file using [Netron](https://netron.app/).
+
 
 ---
 
