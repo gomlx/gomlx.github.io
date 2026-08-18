@@ -53,7 +53,7 @@
   });
 
   /* ── Docs: copy buttons on code blocks ── */
-  document.querySelectorAll('.docs-body pre').forEach(pre => {
+  document.querySelectorAll('.docs-body pre:not(.mermaid)').forEach(pre => {
     const wrap = document.createElement('div');
     wrap.className = 'code-copy-wrap';
     pre.parentNode.insertBefore(wrap, pre);

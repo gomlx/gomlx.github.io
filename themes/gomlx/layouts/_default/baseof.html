@@ -19,10 +19,10 @@
     href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400&family=DM+Serif+Display:ital@0;1&display=swap"
     rel="stylesheet">
 
-  {{ $mainCss := resources.Get "css/main.css" }}
+  {{ $mainCss := resources.Get "css/main.css" | resources.Fingerprint }}
   <link rel="stylesheet" href="{{ $mainCss.RelPermalink }}">
   {{ if not .IsHome }}
-  {{ $docsCss := resources.Get "css/docs.css" }}
+  {{ $docsCss := resources.Get "css/docs.css" | resources.Fingerprint }}
   <link rel="stylesheet" href="{{ $docsCss.RelPermalink }}">
   {{ end }}
 
@@ -40,7 +40,7 @@
   </main>
   {{ partial "footer.html" . }}
   <script>window.GomlxBaseUrl = "{{ "/" | relURL }}";</script>
-  {{ $mainJs := resources.Get "js/main.js" }}
+  {{ $mainJs := resources.Get "js/main.js" | resources.Fingerprint }}
   {{ if $mainJs }}
   <script src="{{ $mainJs.RelPermalink }}"></script>
   {{ end }}

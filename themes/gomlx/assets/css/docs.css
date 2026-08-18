@@ -191,6 +191,14 @@
   position: relative;
 }
 
+.docs-body pre.mermaid {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 .docs-body pre code {
   font-family: var(--font-mono);
   font-size: 13.5px;
