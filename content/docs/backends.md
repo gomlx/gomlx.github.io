@@ -173,6 +173,17 @@ With the `onnx` backend enabled, you can save trained GoMLX models to standard `
 * **Dynamic Axes**: Supports dynamic input dimensions (such as variable batch sizes) using `exec.WithDynamicAxes(...)` and `shapes.MakeDynamic(...)`.
 * **Example**: See the [`save_onnx.go`](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/save_onnx.go) demo in the UCI-Adult example (build with `-tags=onnx`).
 
+#### WebAssembly / Browser Execution (ONNX Runtime Web)
+
+The `onnx` backend also supports compiling to WebAssembly (`GOOS=js GOARCH=wasm`) and executing inside web browsers via [ONNX Runtime Web](https://github.com/gomlx/compute-onnx/blob/main/docs/ort-web.md).
+
+* **Supported Execution Providers**:
+  * **`webgpu`** (or `gpu`): Hardware-accelerated GPU shader execution via WebGPU (best for large vision/transformer models and parallel batches).
+  * **`wasm`** (or `cpu`): High-speed CPU WebAssembly execution using SIMD instructions (best latency for small models and single-sample loops).
+  * **`webnn`**: Hardware NPU/GPU acceleration via the experimental Web Neural Network API in Chromium.
+* **Auto-Detection**: Automatically detects WebGPU hardware availability at startup and defaults to `webgpu` if present, otherwise falling back to `wasm` CPU.
+* **Zero-Config Script Loading**: If `ort.min.js` is not embedded in the page, the backend automatically injects it from the official CDN at runtime.
+
 #### Inspecting & Visualizing `.onnx` Files
 
 * **CLI Printer (`onnx_printer`)**: To inspect the contents, shapes, initializers, and operations of a `.onnx` model file directly in the terminal, use the `onnx_printer` utility in `github.com/gomlx/compute-onnx/cmd/onnx_printer`:
