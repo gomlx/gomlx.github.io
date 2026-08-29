@@ -152,7 +152,7 @@ On static backends like **XLA** (`compute.DynamicShapesNone`), feeding tensors w
 To prevent compilation explosion on static backends, **bucket inputs into a small set of discrete sizes** and pad the remainder with zeros or padding tokens. Common bucketing strategies:
 
 1. **Power-of-2 Bucketing**: Bucket sequence lengths into $32, 64, 128, 256, 512, \dots$.
-2. **Two Bits Bucketing**: Bucket sequence lengths into numbers that use only the 2-bits: $16, 24, 32, 48, \dots$, see `github.com/gomlx/compute/support.TwoBitsBucketLen()`.
+2. **Two-Bit Bucketing**: Bucket sequence lengths into numbers that use only the 2-bits: $16, 24, 32, 48, \dots$, see `github.com/gomlx/compute/support.TwoBitBucketLen()`.
 3. **Linear Bucketing**: Round up to multiples of 32 or 64.
 
 ### Sentence Tokenizer Bucketing
