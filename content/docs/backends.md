@@ -153,9 +153,19 @@ Configuration options (via `GOMLX_BACKEND=onnx:<options>`):
 - **`migraphx_cache_dir=<path>`**: Directory where the MIGraphX compiled-program (`.mxr`) for each model is cached, skipping expensive graph compilation on subsequent runs. Can also be set via `GOMLX_MIGRAPHX_CACHE_DIR`.
 - **`<path/to/libonnxruntime.so>`**: Explicit path to the ONNX Runtime shared library binary (`.so`, `.dylib`, or `.dll`), bypassing `ONNXRUNTIME_SHARED_LIBRARY_PATH`.
 - **`log=<level>`**: Sets internal logging severity level (0=Error, 1=Warning, 2=Info, 3=Verbose).
+- **`intra_op_num_threads=<int>`**: Number of threads to parallelize execution within an operator (default: 0 = all CPU cores). When running multiple concurrent goroutines/workers, set this to `1` to avoid thread oversubscription.
+- **`inter_op_num_threads=<int>`**: Number of threads to parallelize execution across independent operators (only effective with `execution_mode=parallel`).
+- **`execution_mode=<parallel|sequential>`**: Controls whether independent operators execute sequentially or in parallel. Can also be specified as standalone `parallel` or `sequential`.
+- **`cpu_mem_arena=<bool>`**: Enables/disables ONNX Runtime's CPU memory arena allocator (default: true). Disabling (`cpu_mem_arena=false` or `no_cpu_mem_arena`) avoids allocator lock contention across parallel workers.
+- **`mem_pattern=<bool>`**: Enables/disables memory pattern optimization (default: true; sequential mode only).
+- **`graph_optimization_level=<0|1|2|3|99>`** (or `disable_all`, `basic`, `extended`, `all`): Controls the graph optimization level applied by ONNX Runtime.
 - **Default (empty)**: Auto-detects if an NVIDIA GPU is available and defaults to CUDA if present, then checks for a discrete AMD GPU (ROCm/MIGraphX), otherwise falling back to CPU.
 
-Example: `GOMLX_BACKEND="onnx:cuda,log=2"`, `GOMLX_BACKEND=onnx:migraphx`, or `GOMLX_BACKEND="onnx:/path/to/libonnxruntime.so"`
+Examples:
+- `GOMLX_BACKEND="onnx:cuda,log=2"`
+- `GOMLX_BACKEND=onnx:migraphx`
+- `GOMLX_BACKEND="onnx:cpu,intra_op_num_threads=1,inter_op_num_threads=1,cpu_mem_arena=false,execution_mode=parallel"`
+- `GOMLX_BACKEND="onnx:/path/to/libonnxruntime.so"`
 
 #### ONNX Runtime Auto-Installation
 The ONNX Runtime backend includes an auto-installer. At startup, if the ONNX Runtime shared library (`libonnxruntime.so` on Linux, `libonnxruntime.dylib` on macOS, `onnxruntime.dll` on Windows) is not found, it automatically downloads and extracts the official ONNX Runtime binaries locally into:
