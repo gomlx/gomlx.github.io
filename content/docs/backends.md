@@ -159,6 +159,7 @@ Configuration options (via `GOMLX_BACKEND=onnx:<options>`):
 - **`cpu_mem_arena=<bool>`**: Enables/disables ONNX Runtime's CPU memory arena allocator (default: true). Disabling (`cpu_mem_arena=false` or `no_cpu_mem_arena`) avoids allocator lock contention across parallel workers.
 - **`mem_pattern=<bool>`**: Enables/disables memory pattern optimization (default: true; sequential mode only).
 - **`graph_optimization_level=<0|1|2|3|99>`** (or `disable_all`, `basic`, `extended`, `all`): Controls the graph optimization level applied by ONNX Runtime.
+- **`session_clones=<int>`**: Maximum number of concurrent ONNX Runtime session clones pooled per compiled Executable (default: `8` on CPU, `1` on GPU). Clones are allocated on-demand as concurrent goroutines execute, eliminating lock contention while avoiding memory overhead for single-threaded usage.
 - **Default (empty)**: Auto-detects if an NVIDIA GPU is available and defaults to CUDA if present, then checks for a discrete AMD GPU (ROCm/MIGraphX), otherwise falling back to CPU.
 
 Examples:

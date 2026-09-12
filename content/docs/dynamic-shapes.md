@@ -35,6 +35,15 @@ Backends declare their dynamic shape capabilities via `backend.Capabilities().Dy
 | **Recompiling** | `compute.DynamicShapesRecompiling` | **Backend-managed JIT specialization**. Accepts symbolic graphs and shares constant model weights, but specializes/recompiles kernels internally per shape. | `onnx:rocm` (ONNX Runtime for ROCm), TensorRT, TorchInductor |
 | **None** | `compute.DynamicShapesNone` | **Static only**. Backend requires concrete static shapes. GoMLX rebuilds and compiles a new `*Executable` per shape. | `xla` (PJRT CPU/CUDA/TPU) |
 
+### Dynamic Dimension Data Type (`DynamicDimDType`)
+
+Backends advertise the integer data type used for runtime dimensions via `backend.Capabilities().DynamicDimDType` (also accessible via `g.DynamicDimDType()` on any `*Graph`):
+- **`onnx` and `go` backends**: Use `dtypes.Int64` (matching ONNX `tensor(int64)` for shapes, slices, and reshapes, as well as 64-bit Go `int`).
+- **`xla` backend**: Uses `dtypes.Int32` (matching XLA/StableHLO's native `S32` dimension representation).
+- **Default (if unset)**: `dtypes.Int64`.
+
+Within the graph, `graph.DimensionSize(x, axis)` and `graph.DynamicShape(x)` always return nodes matching `g.DynamicDimDType()` to ensure consistent data types across both static and dynamic axes.
+
 You can query if dynamic shapes are supported programmatically:
 
 ```go
@@ -77,7 +86,7 @@ GoMLX provides a rich set of operations designed to handle dynamic tensors seaml
 
 - **`DimensionSpecFor(x, axis)`**: Returns a `DimensionSpec` for the given axis. If static, it returns `StaticDim(dim)`; if dynamic, it returns `NamedDynamicDim(name, DimensionSize(x, axis))`.
 - **`DimensionSpecsFor(x)`**: Returns a slice of `DimensionSpec`s for all axes of `x`.
-- **`DimensionSize(x, axis)`**: Returns an `Int32` scalar `*Node` representing the dimension size. Returns a constant `Scalar` on static shapes, or queries the backend on dynamic shapes.
+- **`DimensionSize(x, axis)`**: Returns a scalar `*Node` representing the dimension size (typically `Int64`, or backend's `DynamicDimDType`). Returns a constant `Scalar` on static shapes, or queries the backend on dynamic shapes.
 
 ### 2. Reshaping
 
