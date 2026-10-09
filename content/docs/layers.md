@@ -313,7 +313,8 @@ Or from the command line:
 go run ./my_model -set="peft_adapter=my_lora;peft_rank=16;peft_alpha=32"
 ```
 
-### Key Features:
+*Key Features:*
+
 * **Zero Code Changes**: Linear layers in `FNN`, `Dense`, and `MultiHeadAttention` automatically freeze their base weights and train only the low-rank matrices ($A$ and $B$).
 * **Selective Targeting (`peft_target_modules`)**: Target specific projections (e.g. `-set=peft_target_modules=query,value`). Unmatched layers have their base weights frozen without adding adapters.
 * **Freeze-Only Mode**: Set `peft_adapter=off` to freeze base weights without creating any adapters.
