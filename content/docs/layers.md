@@ -283,3 +283,43 @@ y := vnn.New(scope, inputVectors, outputChannels).
     NumHiddenLayers(2, 64).
     Done()
 ```
+
+---
+
+## Parameter-Efficient Fine-Tuning (PEFT / LoRA)
+
+The `ml/layers/peft` package implements Parameter-Efficient Fine-Tuning (LoRA) as a "meta-layer" using post-linear lifecycle hooks. 
+
+Instead of rewriting your model code or manually replacing dense projections, you can fine-tune any GoMLX model (built with `fnn`, `layers.Dense`, or `attention.MultiHeadAttention`) simply by importing the package and setting hyperparameters on the model's store or via command-line flags (`-set`):
+
+```go
+import _ "github.com/gomlx/gomlx/ml/layers/peft"
+```
+
+Then configure the adapter on your store:
+
+```go
+store.SetParams(map[string]any{
+	peft.ParamAdapter: "my_lora",       // Sets adapter name; base weights are automatically frozen
+	peft.ParamRank:    16,              // LoRA rank (r)
+	peft.ParamAlpha:   float32(32),     // Scaling factor (alpha)
+	peft.ParamDropout: float32(0.05),   // Dropout on intermediate projection (x @ A)
+})
+```
+
+Or from the command line:
+
+```bash
+go run ./my_model -set="peft_adapter=my_lora;peft_rank=16;peft_alpha=32"
+```
+
+### Key Features:
+* **Zero Code Changes**: Linear layers in `FNN`, `Dense`, and `MultiHeadAttention` automatically freeze their base weights and train only the low-rank matrices ($A$ and $B$).
+* **Selective Targeting (`peft_target_modules`)**: Target specific projections (e.g. `-set=peft_target_modules=query,value`). Unmatched layers have their base weights frozen without adding adapters.
+* **Freeze-Only Mode**: Set `peft_adapter=off` to freeze base weights without creating any adapters.
+* **Multi-Adapter Support**: Multiple named adapters (e.g. `task_a`, `task_b`) can coexist in the same checkpoint, and switching between them at runtime only requires updating the `peft_adapter` parameter.
+
+{{% callout type="tip" %}}
+See the [PEFT Guide](https://github.com/gomlx/gomlx/blob/main/docs/peft.md) in the GoMLX repository for advanced usage, variable layout, and developer documentation on post-linear hooks.
+{{% /callout %}}
+
