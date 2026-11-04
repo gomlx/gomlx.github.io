@@ -104,21 +104,35 @@ For offline deployment or custom production builds (like Docker images), auto-in
 ### 2. The Go Backend (`"go"`)
 A pure Go implementation of the compute API. It does not use CGO or C++ libraries.
 
-* **Pros**: 100% portable. It compiles easily to WebAssembly (WASM) and runs in the browser, making it possible to deploy models on client-side web apps.
-* **Cons**: Slower than XLA for heavy model training.
+* **Pros**: 100% portable. It compiles easily to WebAssembly (WASM) and runs in the browser, making it possible to deploy models on client-side web apps. Also supports dynamic shapes.
+* **Cons**: Slower than GPU/TPU accelerators or XLA for heavy model training.
 * **Performance Enhancements**:
-  * **SIMD support**: Utilizes Go 1.26's experimental `simd/archsimd` package (AVX2/AVX512) for high-performance matrix multiplications (matmul).
-  * **Fused Operations**: Implements fused activation and layer operations to minimize memory allocation.
-  * **Quantization**: Supports quantized operations for faster inference on smaller memory footprints.
+  * **SIMD & Hardware Matrix Acceleration (AMD64 & ARM64)**: When built with `GOEXPERIMENT=simd` (Go 1.27+), utilizes Go's `simd` and `simd/archsimd` packages alongside handwritten assembly microkernels for:
+    * **AMD64**: `AVX2` and `AVX-512` microkernels for `DotGeneral`, `FusedDense`, `FusedScaledDotProductAttention` (`SDPA`), `FusedLayerNorm`, `FusedSoftmax`, reductions, and activations.
+    * **ARM64 (`darwin/arm64` & `linux/arm64`)**: `NEON` (`FEAT_ASIMD`) and Scalable Matrix Extension (`FEAT_SME`, e.g., on Apple M4/M5/M6) assembly microkernels across `DotGeneral`/`FusedDense` (`Float32`, `Float16`, `BFloat16`, `Float64`), `FusedScaledDotProductAttention`, reductions, trailing-axis binary broadcasts, `Where`, and hardware `Float16`/`BFloat16` conversions—with asymmetric CPU cluster probing and hybrid SME + NEON co-execution across Super, Performance, and Efficiency cores (reaching up to **2.51 TFlops/s** on Apple M6).
+  * **Hierarchical 3-Level Parallel Scheduler**: Prioritizes `Inter-Call` > `Intra-Op` > `Inter-Op` parallelism using persistent workers, deadlock-free work-helping, dynamic graph execution, and Guided Self-Scheduling (GSS).
+  * **Fused Operations & Constant Weight Caching**: Implements fused attention, layer normalization, softmax, dense/activation operations, and one-time GEMM constant weight panel pre-packing with automatic raw buffer eviction to minimize memory allocations and bandwidth.
+  * **Quantization**: Supports quantized operations (`FusedQuantizedDense`, `QuantizedEmbeddingLookup`) for faster inference on smaller memory footprints.
 
-It accepts the following special environment variables for tuning:
+Configuration options (via `GOMLX_BACKEND="go:<option1>,<option2>=<value>"`):
 
-* **`GOMLX_SIMD_AVX512`**: Set to `0` or `false` to disable AVX512 SIMD vectorization.
-* **`GOMLX_SIMD_AVX2`**: Set to `0` or `false` to disable AVX2 SIMD vectorization.
-* **`GOMLX_FUSION`**: Set to `0` or `false` to disable fused operations.
+* **`parallelism=<N>`**: Sets the maximum number of worker goroutines in the scheduler pool (defaults to `runtime.GOMAXPROCS(0)`).
+* **`ops_sequential`** / **`ops_parallel`**: Forces graph operations to execute sequentially or in parallel where possible (by default, runs dynamically: parallel when a single execution is live, sequential when multiple concurrent calls are active).
 
-It's relatively easy to add specialized fused operations, or SIMD versions for specific CPUs. Open an issue in the GoMLX repo, or reach use out in
-our slack channel for questions.
+It also accepts the following environment variables for fine-grained tuning:
+
+* **`GOMLX_GO_SIMD_AVX512`**: Set to `0` or `false` to disable AVX-512 SIMD implementations (enabled by default when supported by the CPU).
+* **`GOMLX_GO_SIMD_AVX2`**: Set to `0` or `false` to disable AVX2 SIMD implementations (enabled by default when supported by the CPU).
+* **`GOMLX_GO_SIMD_NEON`**: Set to `0` or `false` to disable ARM64 NEON (`FEAT_ASIMD`) SIMD implementations (enabled by default when supported by the CPU).
+* **`GOMLX_GO_SIMD_SVE`**: Set to `0` or `false` to disable ARM64 SVE SIMD implementations (enabled by default when supported by the CPU).
+* **`GOMLX_GO_SIMD_SME`**: Set to `0` or `false` to disable ARM64 Scalable Matrix Extension (`FEAT_SME`) implementations (enabled by default when supported by the CPU).
+* **`GOMLX_GO_AVX512_ASM`**, **`GOMLX_GO_AVX2_ASM`**, **`GOMLX_GO_NEON_ASM`**: Set to `0` or `false` to disable handwritten assembly GEMM microkernels and fall back to Go SIMD kernels.
+* **`GOMLX_GO_AVX512_KC`**, **`GOMLX_GO_AVX512_MC`**, **`GOMLX_GO_AVX512_NC`** (and corresponding **`GOMLX_GO_AVX2_*`**, **`GOMLX_GO_NEON_*`**, **`GOMLX_GO_NOSIMD_*`**): Override cache blocking parameters (`KC`, `MC`, `NC`) for matrix multiplication.
+* **`GOMLX_GO_DOT_MATMUL`**: Set to `0` or `false` to disable the tiled `matmul` implementation in `DotGeneral` (enabled by default).
+* **`GOMLX_GO_FUSION`**: Set to `0` or `false` to disable fused operations (enabled by default).
+
+It's relatively easy to add specialized fused operations, or SIMD versions for specific CPUs. Open an issue in the GoMLX repo, or reach out to us in
+our Slack channel for questions.
 
 ---
 
