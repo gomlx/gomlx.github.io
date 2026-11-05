@@ -27,6 +27,7 @@ Example `config` (or `GOMLX_BACKEND`) values:
   * `go`: Forces the pure Go backend.
   * `xla`: Uses the XLA backend. It will attempt to use one of TPU, CUDA (Nvidia GPU), or CPU in that order.
     You can also specify which XLA plugin to use explicitly: E.g.: `xla:cpu`, `xla:cuda`.
+  * `mps`: Uses the Apple Silicon GPU backend via Metal Performance Shaders Graph (`MPSGraph`) on macOS (included automatically by `backends/default` on Darwin).
   * `onnx`: Uses the ONNX Runtime backend (included by `backends/default` when built with `-tags=onnx`, or by importing `github.com/gomlx/compute-onnx`).
     You can also specify which accelerator to use explicitly: E.g.: `onnx:cpu`, `onnx:cuda`, `onnx:migraphx`.
 
@@ -136,10 +137,20 @@ our Slack channel for questions.
 
 ---
 
-### 3. The Darwin ML Backend (`"go-darwinml"`)
-*(Experimental)* Implements bindings to Apple’s native CoreML and Metal Performance Shaders (MPSGraph) runtimes.
+### 3. Darwin (Mac) Backend: `"mps"`
+Executes GoMLX computation graphs on Apple Silicon GPUs using Apple's native **Metal** and **Metal Performance Shaders Graph (`MPSGraph`)** frameworks. Implemented in package [`github.com/gomlx/go-darwinml/compute/mps`](https://github.com/gomlx/go-darwinml).
 
-* **Pros**: Leverages Apple Silicon's Apple Neural Engine (ANE) and unified memory GPU (Metal) on Macs.
+* **Importing**: Automatically included on macOS (`darwin`) when importing `github.com/gomlx/gomlx/backends/default` (requires CGO enabled). You can exclude it at build time with `-tags=nomps`, or import it directly via `import _ "github.com/gomlx/go-darwinml/compute/mps"`.
+* **Selection**: Set `GOMLX_BACKEND=mps` or call `compute.NewWithConfig("mps")`.
+* **Architecture & Features**:
+  * **Zero-Copy Unified Memory Shared Buffers**: Allocates tensors directly as Metal `MTLBuffer`s (`MTLResourceStorageModeShared`), allowing CPU and GPU to read and write the same physical memory pages without staging copies, with automatic resource cleanup via Go's `runtime.AddCleanup`.
+  * **Ping-Pong Buffer Pooling**: Works around `MPSGraph`'s lack of in-place input/output buffer aliasing by pooling donated input `MTLBuffer`s across consecutive executions (with cross-executable stealing to avoid memory duplication on multi-task or multi-shape models).
+  * **Fused Operations**: Native support for `FusedSoftmax`, `FusedGelu`, `FusedLayerNorm`, `FusedDense`, `FusedScaledDotProductAttention` (`SDPA`), `FusedAttentionQKVProjection`, and `FusedActivation`.
+* **Limitations**:
+  * Requires macOS (`darwin`) with CGO enabled and an Apple Silicon GPU.
+  * Does not support `Float64`, `Complex64`, or `Complex128` dtypes (a hardware/Metal limitation on Apple GPUs).
+
+> **Performance Note (`"go"` vs `"mps"`)**: With the addition of ARM64 `NEON` and Apple `SME` (`FEAT_SME`) SIMD assembly microkernels and the 3-level parallel scheduler in the **`"go"`** backend, the **`"go"` backend is often faster than `"mps"`** on Apple Silicon Macs—particularly on small-to-medium models or workloads where Metal command-buffer dispatch and graph compilation overhead dominate. We recommend benchmarking both `GOMLX_BACKEND=go` (with `GOEXPERIMENT=simd`) and `GOMLX_BACKEND=mps` for your specific model.
 
 
 ---
