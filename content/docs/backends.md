@@ -28,6 +28,7 @@ Example `config` (or `GOMLX_BACKEND`) values:
   * `xla`: Uses the XLA backend. It will attempt to use one of TPU, CUDA (Nvidia GPU), or CPU in that order.
     You can also specify which XLA plugin to use explicitly: E.g.: `xla:cpu`, `xla:cuda`.
   * `mps`: Uses the Apple Silicon GPU backend via Metal Performance Shaders Graph (`MPSGraph`) on macOS (included automatically by `backends/default` on Darwin).
+  * `mlx`: Uses the Apple Silicon GPU backend via Apple's [MLX](https://github.com/ml-explore/mlx) (`mlx::core`) on macOS (included automatically by `backends/default` on Darwin; requires `brew install mlx`). You can also specify `mlx:dynamic` for native dynamic shapes without recompilation.
   * `onnx`: Uses the ONNX Runtime backend (included by `backends/default` when built with `-tags=onnx`, or by importing `github.com/gomlx/compute-onnx`).
     You can also specify which accelerator to use explicitly: E.g.: `onnx:cpu`, `onnx:cuda`, `onnx:migraphx`.
 
@@ -137,11 +138,18 @@ our Slack channel for questions.
 
 ---
 
-### 3. Darwin (Mac) Backend: `"mps"`
-Executes GoMLX computation graphs on Apple Silicon GPUs using Apple's native **Metal** and **Metal Performance Shaders Graph (`MPSGraph`)** frameworks. Implemented in package [`github.com/gomlx/go-darwinml/compute/mps`](https://github.com/gomlx/go-darwinml).
+### 3. Darwin (Mac) Backends: `"mps"` and `"mlx"` (`go-darwinml`)
+The [`github.com/gomlx/go-darwinml`](https://github.com/gomlx/go-darwinml) repository provides two Apple Silicon GPU backends for macOS (`darwin` with CGO enabled), both included automatically when importing `github.com/gomlx/gomlx/backends/default` on Darwin:
+
+1. **`"mps"` (`github.com/gomlx/go-darwinml/compute/mps`)**: Uses Apple's system **Metal** and **Metal Performance Shaders Graph (`MPSGraph`)** frameworks (no external libraries required).
+2. **`"mlx"` (`github.com/gomlx/go-darwinml/compute/mlx`)**: Uses Apple's **[MLX](https://github.com/ml-explore/mlx)** (`mlx::core`) C++ framework (requires `brew install mlx`).
+
+#### 3.1 The `"mps"` Backend (Metal Performance Shaders Graph)
+Executes GoMLX computation graphs on Apple Silicon GPUs using macOS's built-in `MPSGraph` framework.
 
 * **Importing**: Automatically included on macOS (`darwin`) when importing `github.com/gomlx/gomlx/backends/default` (requires CGO enabled). You can exclude it at build time with `-tags=nomps`, or import it directly via `import _ "github.com/gomlx/go-darwinml/compute/mps"`.
-* **Selection**: Set `GOMLX_BACKEND=mps` or call `compute.NewWithConfig("mps")`.
+* **Selection & Configuration Options**: Set `GOMLX_BACKEND=mps` or call `compute.NewWithConfig("mps")` (no additional configuration options).
+* **Environment Variables**: None specific to `"mps"` (note: when benchmarking against the `"go"` backend on Apple M4/M5/M6, Apple `SME` in the `"go"` backend is controlled by `GOMLX_GO_SIMD_SME=0`).
 * **Architecture & Features**:
   * **Zero-Copy Unified Memory Shared Buffers**: Allocates tensors directly as Metal `MTLBuffer`s (`MTLResourceStorageModeShared`), allowing CPU and GPU to read and write the same physical memory pages without staging copies, with automatic resource cleanup via Go's `runtime.AddCleanup`.
   * **Ping-Pong Buffer Pooling**: Works around `MPSGraph`'s lack of in-place input/output buffer aliasing by pooling donated input `MTLBuffer`s across consecutive executions (with cross-executable stealing to avoid memory duplication on multi-task or multi-shape models).
@@ -151,7 +159,30 @@ Executes GoMLX computation graphs on Apple Silicon GPUs using Apple's native **M
   * **Unsupported DTypes**: Does not support `Float64`, `Complex64`, `Complex128`, or sub-byte integer types (a hardware/Metal limitation on Apple GPUs).
   * **Unsupported Operations**: Complex & FFT operations (`Complex`, `Real`, `Imag`, `Conj`, `FFT`), bit-level/bitwise-reduction operations (`Bitcast`, `BitCount`, `Clz`, `ReduceBitwiseAnd/Or/Xor`, `ReduceLogicalXor`), `SelectAndScatterSum/Min`, dynamic-shape operations, multi-device collective operations, `OptimizationBarrier`/`SchedulingBarrier`, and quantized fused ops (`FusedQuantizedDense`, `QuantizedEmbeddingLookup`). Operations with GoMLX decompositions (like `CumSum` and `CumMax`) fall back automatically.
 
-> **Performance Note (`"go"` vs `"mps"`)**: With the addition of ARM64 `NEON` and Apple `SME` (`FEAT_SME`) SIMD assembly microkernels and the 3-level parallel scheduler in the **`"go"`** backend, the **`"go"` backend is often faster than `"mps"`** on Apple Silicon Macs—particularly on small-to-medium models or workloads where Metal command-buffer dispatch and graph compilation overhead dominate. We recommend benchmarking both `GOMLX_BACKEND=go` (with `GOEXPERIMENT=simd`) and `GOMLX_BACKEND=mps` for your specific model.
+#### 3.2 The `"mlx"` Backend (Apple MLX)
+Executes GoMLX computation graphs on Apple Silicon GPUs using Apple's [MLX](https://github.com/ml-explore/mlx) framework (`mlx::core`).
+
+* **Prerequisites**: Requires MLX installed on macOS:
+  ```bash
+  brew install mlx
+  ```
+  *(See the [MLX installation guide](https://ml-explore.github.io/mlx/build/html/install.html) for alternative installation methods. Building Go programs succeeds even if `mlx` is not installed, and `libmlx.dylib` is loaded dynamically at runtime when the `"mlx"` backend is selected.)*
+* **Importing**: Automatically included on macOS (`darwin`) when importing `github.com/gomlx/gomlx/backends/default` (requires CGO enabled). You can exclude it at build time with `-tags=nomlx`, or import it directly via `import _ "github.com/gomlx/go-darwinml/compute/mlx"`.
+* **Selection & Configuration Options** (via `GOMLX_BACKEND="mlx[:<options>]"` or `compute.NewWithConfig(...)`):
+  * **`mlx`** *(default)*: **Compiled static-shape mode** (`DynamicShapesNone`). Compiles the recorded op tape with `mlx::core::compile(tape_fn, /*shapeless=*/false)` for automatic kernel fusion, and materializes outputs as row-major contiguous arrays (`eager_contiguous`).
+  * **`mlx:dynamic`**: **Native dynamic-shape mode** (`DynamicShapesNative`, `DynamicAxes: true`). Replays the lazy MLX op tape directly on runtime input arrays without `mlx::core::compile`, supporting variable batch sizes and sequence lengths (`shapes.DynamicDim`) with zero recompilation overhead.
+  * **`mlx:dynamic,lazy_contiguous`**: In dynamic mode, skips materializing row-major contiguity on view outputs (`Transpose`, `BroadcastInDim`, `Slice`) at the end of `Execute()`, deferring `mlx::core::contiguous` until the buffer is accessed on the CPU via `Buffer.Data()` or `Buffer.ToFlatData()`.
+* **Environment Variables**:
+  * **`MLX_LIBRARY_PATH`**: Optional explicit path to `libmlx.dylib` (if installed in a non-standard location outside `/opt/homebrew/lib/libmlx.dylib` or `/usr/local/lib/libmlx.dylib`).
+* **Architecture & Features**:
+  * **Zero-Copy Unified Memory Shared Buffers (`mlx::core::array`)**: Allocates unified-memory buffers directly from `mlx::core::allocator::malloc`, exposing shared CPU/GPU pointers as typed Go slices with atomic handle management and `runtime.AddCleanup`.
+  * **Native In-Place Buffer Donation**: Releases external `mlx::core::array` references for donated inputs (`donate[i] == true`) before `mlx::core::eval(outputs)` so `use_count() == 1`, enabling MLX's native in-place buffer reuse (`move_shared_buffer`) with only a single copy of model variables in memory.
+  * **Broad Operation & DType Coverage**: Supports `Complex64`, `Bitcast`, `BitCount`, `Clz`, bitwise reductions (`ReduceBitwiseAnd/Or/Xor`, `ReduceLogicalXor`), cumulative ops (`CumSum`, `CumProd`, `CumMax`, `CumMin`), 1D/2D/3D `ConvGeneral`, general N-D `ReduceWindow` and `SelectAndScatterMax/Min` (via `mlx::core::as_strided`), `BatchNormForInference/Training/Gradient`, `Call` (via tape inlining), pattern-matched `Sort`, and fused ops (`FusedSoftmax`, `FusedLayerNorm` via `mlx::core::fast::layer_norm`, `FusedActivation`, `FusedDense`, `FusedAttentionQKVProjection`, and `FusedScaledDotProductAttention`).
+* **Limitations**:
+  * **Unsupported DTypes**: Does not support `Float64`, `Complex128`, or sub-byte integer types (`Int2`, `Int4`, `Uint2`, `Uint4`) on Apple Silicon Metal GPUs.
+  * **Unsupported Operations**: Data-dependent control flow (`If` and `While`; `Call` is supported via tape inlining and `Sort` is supported for standard ascending/descending comparators), `SelectAndScatterSum`, `FFT`, multi-device collective operations (`AllReduce`), and quantized fused ops (`FusedQuantizedDense`, `QuantizedEmbeddingLookup`).
+
+> **Performance Note (`"go"` vs `"mps"` / `"mlx"`)**: With the addition of ARM64 `NEON` and Apple `SME` (`FEAT_SME`) SIMD assembly microkernels and the 3-level parallel scheduler in the **`"go"`** backend, the **`"go"` backend is often faster than `"mps"` and `"mlx"`** on Apple Silicon Macs—particularly on small-to-medium models or workloads where Metal command-buffer dispatch and graph compilation overhead dominate (you can test `"go"` with or without SME via `GOMLX_GO_SIMD_SME=0`). We recommend benchmarking `GOMLX_BACKEND=go` (with `GOEXPERIMENT=simd`), `GOMLX_BACKEND=mlx`, and `GOMLX_BACKEND=mps` for your specific model.
 
 
 ---
