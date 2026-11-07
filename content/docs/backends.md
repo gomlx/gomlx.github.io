@@ -148,7 +148,8 @@ Executes GoMLX computation graphs on Apple Silicon GPUs using Apple's native **M
   * **Fused Operations**: Native support for `FusedSoftmax`, `FusedGelu`, `FusedLayerNorm`, `FusedDense`, `FusedScaledDotProductAttention` (`SDPA`), `FusedAttentionQKVProjection`, and `FusedActivation`.
 * **Limitations**:
   * Requires macOS (`darwin`) with CGO enabled and an Apple Silicon GPU.
-  * Does not support `Float64`, `Complex64`, or `Complex128` dtypes (a hardware/Metal limitation on Apple GPUs).
+  * **Unsupported DTypes**: Does not support `Float64`, `Complex64`, `Complex128`, or sub-byte integer types (a hardware/Metal limitation on Apple GPUs).
+  * **Unsupported Operations**: Complex & FFT operations (`Complex`, `Real`, `Imag`, `Conj`, `FFT`), bit-level/bitwise-reduction operations (`Bitcast`, `BitCount`, `Clz`, `ReduceBitwiseAnd/Or/Xor`, `ReduceLogicalXor`), `SelectAndScatterSum/Min`, dynamic-shape operations, multi-device collective operations, `OptimizationBarrier`/`SchedulingBarrier`, and quantized fused ops (`FusedQuantizedDense`, `QuantizedEmbeddingLookup`). Operations with GoMLX decompositions (like `CumSum` and `CumMax`) fall back automatically.
 
 > **Performance Note (`"go"` vs `"mps"`)**: With the addition of ARM64 `NEON` and Apple `SME` (`FEAT_SME`) SIMD assembly microkernels and the 3-level parallel scheduler in the **`"go"`** backend, the **`"go"` backend is often faster than `"mps"`** on Apple Silicon Macs—particularly on small-to-medium models or workloads where Metal command-buffer dispatch and graph compilation overhead dominate. We recommend benchmarking both `GOMLX_BACKEND=go` (with `GOEXPERIMENT=simd`) and `GOMLX_BACKEND=mps` for your specific model.
 
