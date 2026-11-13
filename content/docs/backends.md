@@ -110,16 +110,24 @@ A pure Go implementation of the compute API. It does not use CGO or C++ librarie
 * **Cons**: Slower than GPU/TPU accelerators or XLA for heavy model training.
 * **Performance Enhancements**:
   * **SIMD & Hardware Matrix Acceleration (AMD64 & ARM64)**: When built with `GOEXPERIMENT=simd` (Go 1.27+), utilizes Go's `simd` and `simd/archsimd` packages alongside handwritten assembly microkernels for:
-    * **AMD64**: `AVX2` and `AVX-512` microkernels for `DotGeneral`, `FusedDense`, `FusedScaledDotProductAttention` (`SDPA`), `FusedLayerNorm`, `FusedSoftmax`, reductions, and activations.
+    * **AMD64**: `AVX2` and `AVX-512` (including `AVX-512 VNNI`) microkernels for `DotGeneral`, `FusedDense`, `FusedQuantizedDense`, `FusedScaledDotProductAttention` (`SDPA`), `FusedLayerNorm`, `FusedSoftmax`, reductions, and activations.
     * **ARM64 (`darwin/arm64` & `linux/arm64`)**: `NEON` (`FEAT_ASIMD`) and Scalable Matrix Extension (`FEAT_SME`, e.g., on Apple M4/M5/M6) assembly microkernels across `DotGeneral`/`FusedDense` (`Float32`, `Float16`, `BFloat16`, `Float64`), `FusedScaledDotProductAttention`, reductions, trailing-axis binary broadcasts, `Where`, and hardware `Float16`/`BFloat16` conversions—with asymmetric CPU cluster probing and hybrid SME + NEON co-execution across Super, Performance, and Efficiency cores (reaching up to **2.51 TFlops/s** on Apple M6).
   * **Hierarchical 3-Level Parallel Scheduler**: Prioritizes `Inter-Call` > `Intra-Op` > `Inter-Op` parallelism using persistent workers, deadlock-free work-helping, dynamic graph execution, and Guided Self-Scheduling (GSS).
   * **Fused Operations & Constant Weight Caching**: Implements fused attention, layer normalization, softmax, dense/activation operations, and one-time GEMM constant weight panel pre-packing with automatic raw buffer eviction to minimize memory allocations and bandwidth.
-  * **Quantization**: Supports quantized operations (`FusedQuantizedDense`, `QuantizedEmbeddingLookup`) for faster inference on smaller memory footprints.
+  * **Quantization**: Supports quantized operations (`FusedQuantizedDense`, `FusedQuantizedDenseVJP`, `QuantizedEmbeddingLookup`) across all 12 GGML/GGUF block formats (`Q4_0`–`Q8_0`, `IQ4_NL`, `Q2_K`–`Q8_K`), `QuantLinear` (`Int8`, `Uint8`, `Int4`, `Uint4`, `Int2`, `Uint2`), and `QuantNF4` for faster inference and QLoRA backpropagation on smaller memory footprints.
 
 Configuration options (via `GOMLX_BACKEND="go:<option1>,<option2>=<value>"`):
 
-* **`parallelism=<N>`**: Sets the maximum number of worker goroutines in the scheduler pool (defaults to `runtime.GOMAXPROCS(0)`).
-* **`ops_sequential`** / **`ops_parallel`**: Forces graph operations to execute sequentially or in parallel where possible (by default, runs dynamically: parallel when a single execution is live, sequential when multiple concurrent calls are active).
+* **`parallelism=<N>`**: Sets the maximum number of worker goroutines in the intra-op scheduler pool (defaults to `runtime.GOMAXPROCS(0)`). Setting `parallelism=1` disables intra-op multi-threading.
+* **`num_executors=<N>`**: Sets the maximum number of concurrent graph-node executor goroutines launched during parallel graph execution (defaults to `8`, capped at the effective `parallelism`).
+* **`ops_sequential`** / **`ops_parallel`**: Forces independent graph operations to execute sequentially or in parallel where possible (by default, runs dynamically: parallel when a single execution is live, sequential when multiple concurrent calls are active).
+* **`dependency_order`** / **`creation_order`**: Selects the topological node scheduling strategy for sequential execution:
+  * `dependency_order` *(default)*: Critical-path topological order (schedules nodes with the longest dependency path to an output first, breaking ties by creation order).
+  * `creation_order`: Executes nodes in monotonically increasing creation order.
+* **`quantized_cache`** (or **`quantized_cache=<true|false>`**, default `false`): Enables constant weight caching for `FusedQuantizedDense`. By default (`false`), quantized weights stay solely in their compact native representation (e.g., 4-bit GGUF / `QuantLinear` / `NF4`) and are unpacked or dequantized on-the-fly in bounded pooled chunks (`<= 2–4 MiB`) to preserve minimal RAM usage. When enabled (`GOMLX_BACKEND="go:quantized_cache"`), constant quantized weights are pre-packed once on first execution (either into K4-interleaved integer GEMM strips when `quantized_matmul=true`, or into pre-packed float32 GEMM panels for weights up to `64 MiB` when `quantized_matmul=false` / `QuantNF4`) and reused across calls—trading extra memory for higher throughput (especially at small batch sizes).
+* **`no_ops`**: Debugging and benchmarking option that allocates output buffers and runs full graph scheduling without executing kernel math, useful for measuring pure framework and scheduler overhead.
+
+*(Tip: Passing an unknown option such as `GOMLX_BACKEND="go:help"` returns an error listing all valid configuration options.)*
 
 It also accepts the following environment variables for fine-grained tuning:
 
@@ -132,6 +140,7 @@ It also accepts the following environment variables for fine-grained tuning:
 * **`GOMLX_GO_AVX512_KC`**, **`GOMLX_GO_AVX512_MC`**, **`GOMLX_GO_AVX512_NC`** (and corresponding **`GOMLX_GO_AVX2_*`**, **`GOMLX_GO_NEON_*`**, **`GOMLX_GO_NOSIMD_*`**): Override cache blocking parameters (`KC`, `MC`, `NC`) for matrix multiplication.
 * **`GOMLX_GO_DOT_MATMUL`**: Set to `0` or `false` to disable the tiled `matmul` implementation in `DotGeneral` (enabled by default).
 * **`GOMLX_GO_FUSION`**: Set to `0` or `false` to disable fused operations (enabled by default).
+* **`GOMLX_OP_PROFILE`**: Enables per-operator timing summaries in the Go backend. Set to `1` (or `true`) to print a per-op wall/CPU time breakdown every `5` timed runs (after `1` warm-up run), or set to `<N>` (`N > 1`) to print every `N` runs (combine with `GOMLX_BACKEND="go:ops_sequential"` for isolated per-op wall and CPU times).
 
 It's relatively easy to add specialized fused operations, or SIMD versions for specific CPUs. Open an issue in the GoMLX repo, or reach out to us in
 our Slack channel for questions.
