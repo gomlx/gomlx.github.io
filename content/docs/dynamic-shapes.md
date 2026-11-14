@@ -74,7 +74,7 @@ exec.WithDynamicAxes(
 )
 ```
 
-If an axis has an empty string `""`, it is an anonymous dynamic axis. If a slice entry is shorter than the input rank, trailing axes are assumed static.
+Static axes are marked with an empty string `""` (each slice length must match the corresponding input's rank). For non-user-named dynamic dimensions (where cross-input dimension equality is not statically asserted at build time, only checked at runtime when required by an operation), generate a unique `#`-prefixed axis name via `shapes.UniqueAxisName("dim")`.
 
 ---
 
