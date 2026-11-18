@@ -87,8 +87,9 @@ Go conditional statements (`if`) run during graph building, not execution. To pe
 
 ### 6. Random Number Generation (RNG)
 GoMLX implements **stateless functional random number generation** (similar to JAX):
-* **State Propagation**: RNG operations require passing and returning an `RNGState` node. This guarantees that model initialization and dropout are fully reproducible.
-* **Distributions**: `RandomNormal`, `RandomUniform`, `RandomBinomial`.
+* **Algorithm Selection & State Propagation**: Every graph RNG function takes an explicit `algo RNGAlgorithm` (`RNGDefault`, `RNGPhilox`, `RNGThreeFry`, `RNGSplitMix64`, `RNGPCG`, or `RNGChaCha8`) and an `rngState *Node`, returning the updated `(newRNGState, values *Node)`. Create initial states with `RNGStateFromSeedForGraph(g, algo, seed)` / `RNGStateForGraph(g, algo)` (or `RNGState` / `RNGStateFromSeed` for explicit algorithms).
+* **Operations & Distributions**: `RNGBitGenerator`, `RNGStateSplit`, `RandomUniform`, `RandomNormal`, `RandomIntN`.
+* **Managed RNG in `model.Store` / `model.Scope`**: If you are using `model.Store` / `model.Scope` (or `layers`), use `scope.RandomUniform`, `scope.RandomNormal`, `scope.RandomBernoulli`, and `scope.RandomIntN` instead—the store tracks the state and algorithm automatically. See [Variables & Checkpointing: Random Number Generation](/docs/variables-and-checkpoints/#random-number-generation).
 
 ---
 

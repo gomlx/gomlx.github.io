@@ -132,6 +132,103 @@ exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Nod
 
 ---
 
+## Random Number Generation
+
+Because GoMLX computation graphs are stateless, threading an `rngState` node manually through every layer and training step would add significant boilerplate. Instead, `model.Store` (and `model.Scope`, whose `Random*` methods delegate to its `Store`) manages Pseudo-Random Number Generator (PRNG) state automatically using internal non-trainable variables.
+
+### Sampling with `Store` and `Scope`
+
+Inside a model or layer function, call any of the `Random*` helpers directly on your `scope` or `store` without passing or returning an RNG state:
+
+```go
+func MyModel(scope *model.Scope, x *Node) *Node {
+	g := x.Graph()
+	shape := x.Shape()
+
+	// Uniform floats in [0.0, 1.0) (supports Float16, BFloat16, Float32, Float64, Complex64, Complex128)
+	u := scope.RandomUniform(g, shape)
+
+	// Standard normal floats (mean 0.0, stddev 1.0)
+	z := scope.RandomNormal(g, shape)
+
+	// Bernoulli samples: 0/1 (or false/true for dtypes.Bool) with probability prob
+	keep := scope.RandomBernoulli(Scalar(g, dtypes.Float32, 0.9), shape)
+
+	// Uniform integers in [0, N-1] (N can be a Go integer or scalar *Node)
+	idx := scope.RandomIntN(g, 10, shapes.Make(dtypes.Int32, 4))
+	_ = idx
+
+	return Where(ConvertDType(keep, dtypes.Bool), Add(x, z), u)
+}
+```
+
+Every call reads the active RNG state variable from the `Store`, advances it in the graph, and registers the updated state node as a side-output so `model.Exec` persists the new state for the next step. Because RNG states are `model.Variable`s in the `Store`, they are also saved and restored automatically by `checkpoint.Handler`.
+
+### Seeding & Resetting
+
+By default, RNG state is initialized from the OS cryptographically secure random source. For reproducible runs:
+
+- **`store.SetRNGStateFromSeed(seed int64)`**: Sets a deterministic 64-bit seed. Safe to call *before* any backend or graph exists—any per-algorithm RNG variables accessed later will initialize lazily from `seed`, and already-materialized ones are re-seeded immediately.
+- **Hyperparameter `model.ParamInitialSeed` (`"initializer_seed"`)**: Sets the deterministic seed via hyperparameters (for example, `-set "initializer_seed=42"`). Note: setting this to a non-zero value makes initialization deterministic across runs; `ResetRNGState()` also respects it if set.
+- **`store.ResetRNGState()`**: Re-initializes RNG state variables back to `ParamInitialSeed` (if set) or to a fresh OS random seed.
+
+### Choosing an RNG Algorithm (`RNGAlgorithm`)
+
+GoMLX supports portable algorithm selection via `graph.RNGAlgorithm` (aliased from `compute.RNGAlgorithm`):
+
+| Algorithm | State Shape | Description & Backend Support |
+| :--- | :--- | :--- |
+| `RNGDefault` | Backend-dependent | Uses each backend's preferred native PRNG (`RNGPhilox` on `xla` and `go`, `RNGThreeFry` on `mps` and `mlx`, `RNGSplitMix64` on `onnx` CPU/CUDA, `[4]uint32` ThreeFry on `onnx:webgpu`). |
+| `RNGPhilox` | `[3]uint64` | Counter-based Philox-4x32-10 (OpenXLA default). Native on `xla` and `go`; automatic graph fallback elsewhere. |
+| `RNGThreeFry` | `[2]uint64` | Counter-based ThreeFry-2x32-20 (JAX/OpenXLA standard). Native on `go`, `xla`, `onnx`, `mps`, and `mlx`; automatic graph fallback elsewhere. |
+| `RNGSplitMix64` | `[2]uint64` | Fast 64-bit counter-based SplitMix64. Native on `go` and `onnx`; automatic graph fallback on backends supporting `Uint64`. |
+| `RNGPCG` | `[2]uint64` | Sequential 128-bit PCG-DXSM matching Go's `math/rand/v2.PCG`. CPU-oriented (`go` backend only; not decomposed for GPUs). |
+| `RNGChaCha8` | `[5]uint64` | Counter-mode ChaCha8 CSPRNG. Native on `go`; automatic graph fallback elsewhere. |
+
+You can configure the algorithm on a `model.Store` either programmatically or via the `model.ParamRNGAlgorithm` (`"rng_algorithm"`) hyperparameter:
+
+```go
+// Programmatic configuration (chainable before creating graphs or executors):
+store := model.NewStore().WithRNGAlgorithm(graph.RNGThreeFry)
+store.SetRNGStateFromSeed(42)
+
+// Or via Store hyperparameter / CLI `-set`:
+//   store.SetParam(model.ParamRNGAlgorithm, "philox")
+//   -set "rng_algorithm=three_fry;initializer_seed=42"
+```
+
+Internally, `Store` maintains a separate state variable **per resolved algorithm** (named `#rngState_<algo>`, or `#rngState_default_<backend>` if a backend uses a private default). If the same `Store` is used across multiple backends (for example, `go` and `xla`):
+- With an explicit algorithm like `RNGThreeFry` or `RNGPhilox`, both backends share the same variable, automatically move it via `.ToLocal()` when switching backends, and advance the exact same deterministic PRNG sequence.
+- With `RNGDefault` on backends that use different native algorithms, each backend maintains its own independent state variable so they never overwrite each other with incompatible state tensors.
+
+You can inspect or retrieve the active state variable for a graph via `store.RNGStateVariable(g)`.
+
+### Plain Graph RNG Functions (`core/graph`)
+
+When writing stateless `graph.Exec` code without a `model.Store`, use the `core/graph` RNG functions directly. Every function takes `algo RNGAlgorithm` explicitly (before `seed` or `rngState`) and returns the updated state along with the generated values:
+
+```go
+// Initialize deterministic or OS-seeded RNG state for a graph (accepts RNGDefault or explicit algorithms):
+rngState := graph.RNGStateFromSeedForGraph(g, graph.RNGThreeFry, 42)
+// Or OS-seeded: rngState := graph.RNGStateForGraph(g, graph.RNGDefault)
+
+// Or create a host *tensors.Tensor state directly to pass as a graph parameter:
+// (RNGState / RNGStateFromSeed require an explicit algorithm; use *ForBackend for RNGDefault)
+// stateTensor, err := graph.RNGStateFromSeed(graph.RNGThreeFry, 42)
+// stateTensor, err := graph.RNGStateFromSeedForBackend(backend, graph.RNGDefault, 42)
+
+// Thread rngState through sampling operations:
+rngState, u := graph.RandomUniform(graph.RNGThreeFry, rngState, shapes.Make(dtypes.Float32, 4))
+rngState, z := graph.RandomNormal(graph.RNGThreeFry, rngState, shapes.Make(dtypes.Float32, 4))
+rngState, idx := graph.RandomIntN(graph.RNGThreeFry, rngState, 10, shapes.Make(dtypes.Int32, 4))
+
+// Low-level bit generation (Uint8, Uint16, Uint32, Uint64) and state splitting:
+rngState, bits := graph.RNGBitGenerator(graph.RNGThreeFry, rngState, shapes.Make(dtypes.Uint32, 4))
+state1, state2 := graph.RNGStateSplit(graph.RNGThreeFry, rngState)
+```
+
+---
+
 ## Checkpointing (Saving and Loading)
 
 <img align="right" src="/img/gopher_checkpointing.jpeg" alt="GoMLX Gopher" width="220px"/>
