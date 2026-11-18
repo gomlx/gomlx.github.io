@@ -150,15 +150,15 @@ A `graph.Exec` is completely **stateless**. Every execution computes the output 
 
 ## Automatic Differentiation (Gradients)
 
-To train machine learning models, GoMLX computes gradients symbolically at graph building time using back-propagation.
+To train machine learning models, GoMLX computes gradients symbolically at graph building time using back-propagation in the `github.com/gomlx/gomlx/core/autodiff` package:
 
 ```go
-// Gradient calculates symbolic gradients of the scalar loss w.r.t the target nodes.
-grads := Gradient(scalarLoss, weightNode, biasNode)
+// autodiff.Gradient calculates symbolic gradients of the scalar loss w.r.t the target nodes.
+grads := autodiff.Gradient(scalarLoss, weightNode, biasNode)
 gradWeight, gradBias := grads[0], grads[1]
 ```
 {{< callout type="info" >}}
-* **Scalar Loss Requirement**: The first argument to `Gradient` must evaluate to a scalar (0D) shape. If your loss is a batch vector, collapse it first (e.g., using `ReduceAllSum` or `ReduceMean`).
+* **Scalar Loss Requirement**: The first argument to `autodiff.Gradient` must evaluate to a scalar (0D) shape. If your loss is a batch vector, collapse it first (e.g., using `ReduceAllSum` or `ReduceMean`).
 * **Limitations**: GoMLX currently supports first-order gradients. Direct computation of full Jacobians or Hessians is not supported out-of-the-box.
 {{< /callout >}}
 
@@ -176,11 +176,11 @@ When implementing neural networks, GoMLX offers two directories:
 2. `ml/nn` (Neural Network Operators): A **stateless** library of neural network primitives.
 
 ### The Role of `ml/nn`
-The `github.com/gomlx/gomlx/ml/nn` package contains functions like `nn.Dense`, `nn.LayerNorm`, `nn.QuantizedDense`, and `nn.Softcap`. 
+The `github.com/gomlx/gomlx/ml/nn` package contains functions like `nn.Dense`, `nn.LayerNorm`, `nn.QuantizedDense`, `nn.QuantizedGather`, `nn.FusedScaledDotProductAttention`, and `nn.Softcap`. 
 
 * **No Scopes/Variables**: Unlike their layer counterparts, `nn` functions do not accept a `*model.Scope` and do not register variables in the background.
 * **Pure Functions**: You must declare and manage weights/biases manually, and pass them as explicit `*graph.Node` inputs.
-* **Optimized Fused Ops**: Many `nn` operators automatically check if the backend supports hardware-fused execution (e.g., `BackendFusedDense` under XLA) and fall back to decomposing into primitive operations (`denseDecomposed`) if fused operations are unsupported.
+* **Optimized Fused Ops**: Many `nn` operators automatically check if the backend supports hardware-fused execution (e.g., fused `Dense` under XLA/CUDA) and fall back to decomposing into primitive operations if fused operations are unsupported.
 
 #### Example: `nn.Dense` Usage
 ```go

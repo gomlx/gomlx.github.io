@@ -312,7 +312,7 @@ A fundamental requirement for training neural networks is the ability to compute
 GoMLX performs automatic symbolic differentiation during the graph building phase. 
 It automatically appends the mathematical operations required for back-propagation directly into the computation graph.
 
-Use the `graph.Gradient(loss, targets...)` function to calculate the gradient of a scalar node (typically the model's loss) with respect to a list of target nodes:
+Use the `autodiff.Gradient(loss, targets...)` function (in package `github.com/gomlx/gomlx/core/autodiff`) to calculate the gradient of a scalar node (typically the model's loss) with respect to a list of target nodes:
 
 <!-- sync_code: file=core-concepts/gradient/gradient.go tag=grad_fn -->
 ```go
@@ -320,11 +320,11 @@ func GradFn(x, y *Node) (loss, gradX, gradY *Node) {
 	// f(x, y) = x^2 + xy
 	loss = Add(Square(x), Mul(x, y))
 
-	// Reduce if inputs are not scalars, as Gradient requires a scalar loss
+	// Reduce if inputs are not scalars, as autodiff.Gradient requires a scalar loss
 	scalarLoss := ReduceAllSum(loss)
 
 	// Calculate gradients df/dx and df/dy symbolically
-	grads := Gradient(scalarLoss, x, y)
+	grads := autodiff.Gradient(scalarLoss, x, y)
 	return loss, grads[0], grads[1]
 }
 ```
