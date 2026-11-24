@@ -118,7 +118,10 @@ A pure Go implementation of the compute API. It does not use CGO or C++ librarie
 
 Configuration options (via `GOMLX_BACKEND="go:<option1>,<option2>=<value>"`):
 
-* **`parallelism=<N>`**: Sets the maximum number of worker goroutines in the intra-op scheduler pool (defaults to `runtime.GOMAXPROCS(0)`). Setting `parallelism=1` disables intra-op multi-threading.
+* **`parallelism=<N>`**: Sets the maximum number of worker goroutines in the intra-op scheduler pool **and** throttles concurrent `Executable.Execute()` calls to at most `N` (when `N > 0`; `parallelism=1` disables intra-op multi-threading; `parallelism=0` disables parallelism; `parallelism=-1` is unlimited).
+  * **Default**: Uses **physical CPU cores** (`min(PhysicalCores(), runtime.GOMAXPROCS(0))`) when **AVX-512** is active (since 512-bit AVX-512 kernels saturate each physical core's FMA/VNNI/BF16 units and private L1/L2 caches with a single thread), and **`runtime.GOMAXPROCS(0)`** otherwise (AVX2, ARM64, or non-SIMD builds).
+  * **Note on heterogeneous and high-core-count CPUs**: Modern CPUs are very heterogeneous — with asymmetric Performance/Efficiency core clusters (e.g., Intel hybrid P+E cores where P-cores have Hyper-Threading and E-cores do not, or Apple Silicon Super/Performance/Efficiency clusters), SMT/Hyper-Threading, multi-CCD/V-Cache L3 layouts, and varying SIMD widths — so the automatic default will not always be optimal for every CPU and workload.
+  * **High-core-count server CPUs (AMD EPYC / Intel Xeon, 64–192+ cores)**: While high core counts scale well for **inter-call** concurrency (many simultaneous `Execute()` calls), single-stream **intra-op / inter-op** parallelism often hits diminishing returns or slows down beyond ~32–64 cores due to cross-CCD/cross-socket synchronization overhead, NUMA memory latency, and per-socket DDR5 bandwidth saturation. On very large EPYC/Xeon machines, lowering `parallelism=<N>` (e.g., `32` or `64` for single-stream inference) or pinning one process per NUMA node (e.g., via `numactl`) is often significantly faster. For performance-critical deployments, benchmark a few explicit `parallelism=<N>` values.
 * **`num_executors=<N>`**: Sets the maximum number of concurrent graph-node executor goroutines launched during parallel graph execution (defaults to `8`, capped at the effective `parallelism`).
 * **`ops_sequential`** / **`ops_parallel`**: Forces independent graph operations to execute sequentially or in parallel where possible (by default, runs dynamically: parallel when a single execution is live, sequential when multiple concurrent calls are active).
 * **`dependency_order`** / **`creation_order`**: Selects the topological node scheduling strategy for sequential execution:
@@ -129,6 +132,7 @@ Configuration options (via `GOMLX_BACKEND="go:<option1>,<option2>=<value>"`):
   * **`always`** (or `true`, `1`, or bare `quantized_cache`): Caches every eligible constant quantized weight (both Mode B K4 panels and Mode A `float32` GEMM panels) and supporting constant tensor regardless of size or expansion ratio. Donated raw buffers are freed once cached; non-donated constants are still cached and shared across graphs while keeping the caller's raw buffer intact.
   * **`never`** (or `none`, `false`, `0`): Disables quantized constant caching completely; all quantized weights and supporting tensors are unpacked or converted on the fly in bounded pooled chunks (`<= 2–4 MiB`).
   * See [`GoBackendMemoryUsage.md`](https://github.com/gomlx/compute/blob/main/docs/GoBackendMemoryUsage.md) for a full breakdown of Go backend memory management, expansion ratios, and caching behavior.
+* **`constant_arena[=<true|false>]`** *(default `true`)*: Allocates pre-packed/cached constant weight panels into 2 MiB-aligned off-heap `mmap` chunks advised with `MADV_HUGEPAGE` on Linux, reference-counted per compiled `Builder`/`Executable` so chunks are immediately unmapped back to the OS once all referencing executables (or the backend) are finalized. Also configurable via `GOMLX_GO_CONSTANT_ARENA`.
 * **`no_ops`**: Debugging and benchmarking option that allocates output buffers and runs full graph scheduling without executing kernel math, useful for measuring pure framework and scheduler overhead.
 
 *(Tip: Passing an unknown option such as `GOMLX_BACKEND="go:help"` returns an error listing all valid configuration options.)*
@@ -136,6 +140,8 @@ Configuration options (via `GOMLX_BACKEND="go:<option1>,<option2>=<value>"`):
 It also accepts the following environment variables for fine-grained tuning:
 
 * **`GOMLX_GO_SIMD_AVX512`**: Set to `0` or `false` to disable AVX-512 SIMD implementations (enabled by default when supported by the CPU).
+* **`GOMLX_GO_SIMD_AVX512_BF16`**: Set to `0` or `false` to disable native `AVX512_BF16` (`VDPBF16PS`) `BFloat16` matmul kernels and fall back to AVX-512 FP32-unpack kernels (enabled by default when supported by the CPU).
+* **`GOMLX_GO_CONSTANT_ARENA`**: Set to `0` or `false` to disable the off-heap `MADV_HUGEPAGE` constant arena (enabled by default).
 * **`GOMLX_GO_SIMD_AVX2`**: Set to `0` or `false` to disable AVX2 SIMD implementations (enabled by default when supported by the CPU).
 * **`GOMLX_GO_SIMD_NEON`**: Set to `0` or `false` to disable ARM64 NEON (`FEAT_ASIMD`) SIMD implementations (enabled by default when supported by the CPU).
 * **`GOMLX_GO_SIMD_SVE`**: Set to `0` or `false` to disable ARM64 SVE SIMD implementations (enabled by default when supported by the CPU).
